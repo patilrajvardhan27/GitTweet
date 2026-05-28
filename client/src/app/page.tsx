@@ -173,11 +173,11 @@ export default function LandingPage() {
             your progress — in seconds.
           </p>
           <div className="flex items-center gap-3 justify-center lg:justify-start flex-wrap">
-            <a href="/auth/github">
+            <Link href="/connect">
               <Button variant="primary" size="lg">
                 Get started free →
               </Button>
-            </a>
+            </Link>
             <a href="#how">
               <Button variant="ghost" size="lg">
                 See how it works
@@ -249,11 +249,11 @@ export default function LandingPage() {
         <p className="text-text-2 mb-8 max-w-sm mx-auto">
           Connect GitHub in 30 seconds. Your first tweet is one click away.
         </p>
-        <a href="/auth/github">
+        <Link href="/connect">
           <Button variant="primary" size="lg">
             Get started free →
           </Button>
-        </a>
+        </Link>
       </section>
 
       {/* Footer */}

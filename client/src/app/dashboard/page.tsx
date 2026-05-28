@@ -36,7 +36,7 @@ export default function DashboardPage() {
   // Redirect to landing if not authed and loading finished
   useEffect(() => {
     if (!authLoading && !github) {
-      router.replace('/');
+      router.replace('/connect');
     }
   }, [authLoading, github, router]);
 

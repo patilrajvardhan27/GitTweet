@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import type { AuthStatus } from '@/types';
 
 export function useAuth() {
-  const [data, setData] = useState<AuthStatus>({ github: null, twitter: null });
+  const [data, setData] = useState<AuthStatus>({ google: null, github: null, twitter: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +27,7 @@ export function useAuth() {
   }, [refresh]);
 
   return {
+    google: data.google,
     github: data.github,
     twitter: data.twitter,
     loading,

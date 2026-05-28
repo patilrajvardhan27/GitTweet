@@ -1,13 +1,16 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { AccountCard } from './AccountCard';
-import type { GithubUser, TwitterUser } from '@/types';
+import type { GoogleUser, GithubUser, TwitterUser } from '@/types';
 
 interface LayoutProps {
+  google: GoogleUser | null;
   github: GithubUser | null;
   twitter: TwitterUser | null;
   onDisconnect: (provider: 'github' | 'twitter') => void;
+  onLogout: () => void;
   children: React.ReactNode;
 }
 
@@ -30,7 +33,7 @@ function Logo() {
   );
 }
 
-export function Layout({ github, twitter, onDisconnect, children }: LayoutProps) {
+export function Layout({ google, github, twitter, onDisconnect, onLogout, children }: LayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-bg-base">
       {/* Sidebar */}
@@ -47,10 +50,38 @@ export function Layout({ github, twitter, onDisconnect, children }: LayoutProps)
           <AccountCard provider="twitter" user={twitter} onDisconnect={() => onDisconnect('twitter')} />
         </nav>
 
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border space-y-3">
+          {google && (
+            <div className="flex items-center gap-2.5">
+              {google.picture ? (
+                <Image
+                  src={google.picture}
+                  alt={google.name}
+                  width={28}
+                  height={28}
+                  className="rounded-full shrink-0"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-bg-elevated flex items-center justify-center text-text-3 text-xs shrink-0">
+                  {google.name[0]?.toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-text-1 truncate">{google.name}</p>
+                <p className="text-[10px] text-text-3 truncate">{google.email}</p>
+              </div>
+              <button
+                onClick={onLogout}
+                className="text-[10px] text-text-3 hover:text-red transition-colors duration-150 shrink-0"
+                title="Sign out"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
           <Link
             href="/"
-            className="text-xs text-text-3 hover:text-text-2 transition-colors duration-150"
+            className="text-xs text-text-3 hover:text-text-2 transition-colors duration-150 block"
           >
             ← Back to home
           </Link>

@@ -26,6 +26,11 @@ const config = {
   isProd,
   port: parseInt(process.env.PORT ?? '3001', 10),
   sessionSecret: process.env.SESSION_SECRET ?? 'dev-secret-change-me',
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    callbackUrl: `${process.env.SERVER_URL ?? 'http://localhost:3001'}/auth/google/callback`,
+  },
   github: {
     clientId: process.env.GITHUB_CLIENT_ID ?? '',
     clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',

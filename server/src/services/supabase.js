@@ -15,59 +15,129 @@ function isEnabled() {
   return !!supabase;
 }
 
-async function saveTweet({ githubLogin, text, tweetUrl, repo, tone }) {
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+/**
+ * Upsert a user record based on their Google ID.
+ * Returns the internal user UUID which is used as the FK everywhere else.
+ */
+async function upsertUser({ googleId, email, name, picture }) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('users')
+    .upsert(
+      { google_id: googleId, email, name, picture, last_seen_at: new Date().toISOString() },
+      { onConflict: 'google_id' },
+    )
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+// ─── User Accounts ────────────────────────────────────────────────────────────
+
+/**
+ * Upsert a linked account (github or twitter) for a user.
+ * provider: 'github' | 'twitter'
+ * providerData: { providerId, username, name, avatarUrl }
+ */
+async function linkAccount(userId, provider, { providerId, username, name, avatarUrl }) {
+  if (!supabase || !userId) return;
+  const { error } = await supabase
+    .from('user_accounts')
+    .upsert(
+      {
+        user_id: userId,
+        provider,
+        provider_id: String(providerId),
+        username,
+        name,
+        avatar_url: avatarUrl,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,provider' },
+    );
+  if (error) throw error;
+}
+
+async function removeAccount(userId, provider) {
+  if (!supabase || !userId) return;
+  const { error } = await supabase
+    .from('user_accounts')
+    .delete()
+    .eq('user_id', userId)
+    .eq('provider', provider);
+  if (error) throw error;
+}
+
+// ─── Tweets ───────────────────────────────────────────────────────────────────
+
+async function saveTweet({ userId, githubLogin, text, tweetUrl, repo, tone }) {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from('tweets')
-    .insert({ github_login: githubLogin, text, tweet_url: tweetUrl, repo, tone })
+    .insert({ user_id: userId ?? null, github_login: githubLogin ?? null, text, tweet_url: tweetUrl, repo, tone })
     .select()
     .single();
   if (error) throw error;
   return data;
 }
 
-async function getTweets(githubLogin, limit = 20) {
+async function getTweets(userId, limit = 20) {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from('tweets')
     .select('id, text, tweet_url, repo, tone, created_at')
-    .eq('github_login', githubLogin)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
   return data ?? [];
 }
 
-async function clearTweets(githubLogin) {
+async function clearTweets(userId) {
   if (!supabase) return;
   const { error } = await supabase
     .from('tweets')
     .delete()
-    .eq('github_login', githubLogin);
+    .eq('user_id', userId);
   if (error) throw error;
 }
 
-async function getPreferences(githubLogin) {
+// ─── Preferences ─────────────────────────────────────────────────────────────
+
+async function getPreferences(userId) {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from('user_preferences')
     .select('default_tone, default_repo')
-    .eq('github_login', githubLogin)
+    .eq('user_id', userId)
     .single();
   // PGRST116 = no rows found — not an error
   if (error && error.code !== 'PGRST116') throw error;
   return data ?? null;
 }
 
-async function upsertPreferences(githubLogin, { defaultTone, defaultRepo }) {
-  if (!supabase) return;
+async function upsertPreferences(userId, { defaultTone, defaultRepo }) {
+  if (!supabase || !userId) return;
   const { error } = await supabase
     .from('user_preferences')
     .upsert(
-      { github_login: githubLogin, default_tone: defaultTone, default_repo: defaultRepo ?? null },
-      { onConflict: 'github_login' },
+      { user_id: userId, default_tone: defaultTone, default_repo: defaultRepo ?? null, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
     );
   if (error) throw error;
 }
 
-module.exports = { isEnabled, saveTweet, getTweets, clearTweets, getPreferences, upsertPreferences };
+module.exports = {
+  isEnabled,
+  upsertUser,
+  linkAccount,
+  removeAccount,
+  saveTweet,
+  getTweets,
+  clearTweets,
+  getPreferences,
+  upsertPreferences,
+};

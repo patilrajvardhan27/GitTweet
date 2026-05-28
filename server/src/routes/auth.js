@@ -7,7 +7,75 @@ const config = require('../config');
 const github = require('../services/github');
 const twitter = require('../services/twitter');
 
+const db = require('../services/supabase');
+
 const router = express.Router();
+
+// ─── Google OAuth ─────────────────────────────────────────────────────────────
+
+router.get('/google', (req, res) => {
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.googleState = state;
+
+  const params = new URLSearchParams({
+    client_id: config.google.clientId,
+    redirect_uri: config.google.callbackUrl,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    access_type: 'offline',
+    prompt: 'select_account',
+  });
+
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+router.get('/google/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error || state !== req.session.googleState) {
+    return res.redirect(`${config.clientUrl}?error=google_auth_failed`);
+  }
+
+  delete req.session.googleState;
+
+  try {
+    const tokenRes = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      new URLSearchParams({
+        client_id: config.google.clientId,
+        client_secret: config.google.clientSecret,
+        code,
+        redirect_uri: config.google.callbackUrl,
+        grant_type: 'authorization_code',
+      }).toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    );
+
+    const { access_token } = tokenRes.data;
+
+    const userRes = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+
+    const googleUser = userRes.data;
+    req.session.google = { accessToken: access_token, user: googleUser };
+
+    // Persist user to DB and store internal UUID in session
+    const userId = await db.upsertUser({
+      googleId: String(googleUser.id),
+      email: googleUser.email,
+      name: googleUser.name,
+      picture: googleUser.picture ?? null,
+    }).catch((e) => { console.error('[db] upsertUser failed:', e.message); return null; });
+
+    if (userId) req.session.userId = userId;
+
+    res.redirect(`${config.clientUrl}/connect`);
+  } catch {
+    res.redirect(`${config.clientUrl}?error=google_auth_failed`);
+  }
+});
 
 // ─── GitHub OAuth ─────────────────────────────────────────────────────────────
 
@@ -52,7 +120,16 @@ router.get('/github/callback', async (req, res) => {
     const user = await github.getUser(accessToken);
     req.session.github = { accessToken, user };
 
-    res.redirect(`${config.clientUrl}/dashboard`);
+    if (req.session.userId) {
+      db.linkAccount(req.session.userId, 'github', {
+        providerId: user.id ?? user.login,
+        username: user.login,
+        name: user.name ?? user.login,
+        avatarUrl: user.avatar_url ?? null,
+      }).catch((e) => console.error('[db] linkAccount github failed:', e.message));
+    }
+
+    res.redirect(`${config.clientUrl}/connect`);
   } catch {
     res.redirect(`${config.clientUrl}?error=github_auth_failed`);
   }
@@ -123,7 +200,16 @@ router.get('/twitter/callback', async (req, res) => {
 
     req.session.twitter = { accessToken: access_token, refreshToken: refresh_token, user };
 
-    res.redirect(`${config.clientUrl}/dashboard`);
+    if (req.session.userId) {
+      db.linkAccount(req.session.userId, 'twitter', {
+        providerId: user.id,
+        username: user.username,
+        name: user.name,
+        avatarUrl: user.profile_image_url ?? null,
+      }).catch((e) => console.error('[db] linkAccount twitter failed:', e.message));
+    }
+
+    res.redirect(`${config.clientUrl}/connect`);
   } catch {
     res.redirect(`${config.clientUrl}?error=twitter_auth_failed`);
   }
@@ -133,6 +219,7 @@ router.get('/twitter/callback', async (req, res) => {
 
 router.get('/status', (req, res) => {
   res.json({
+    google: req.session.google?.user ?? null,
     github: req.session.github?.user ?? null,
     twitter: req.session.twitter?.user ?? null,
   });
@@ -141,14 +228,32 @@ router.get('/status', (req, res) => {
 router.post('/disconnect/:provider', (req, res) => {
   const { provider } = req.params;
 
-  if (provider === 'github') {
+  if (provider === 'google') {
+    delete req.session.google;
+    delete req.session.userId;
+  } else if (provider === 'github') {
     delete req.session.github;
+    if (req.session.userId) {
+      db.removeAccount(req.session.userId, 'github')
+        .catch((e) => console.error('[db] removeAccount github failed:', e.message));
+    }
   } else if (provider === 'twitter') {
     delete req.session.twitter;
+    if (req.session.userId) {
+      db.removeAccount(req.session.userId, 'twitter')
+        .catch((e) => console.error('[db] removeAccount twitter failed:', e.message));
+    }
   } else {
     return res.status(400).json({ error: 'Unknown provider' });
   }
 
+  res.json({ success: true });
+});
+
+// Logout clears Google identity but preserves GitHub/Twitter connections in the session.
+router.post('/logout', (req, res) => {
+  delete req.session.google;
+  delete req.session.userId;
   res.json({ success: true });
 });
 

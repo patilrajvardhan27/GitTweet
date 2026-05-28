@@ -61,11 +61,12 @@ function createApp() {
       secret: config.sessionSecret,
       resave: false,
       saveUninitialized: false,
+      rolling: true, // resets expiry on every request so active users stay logged in
       cookie: {
         httpOnly: true,
         secure: config.isProd,
         sameSite: config.isProd ? 'none' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days; only clears on explicit logout
       },
     }),
   );

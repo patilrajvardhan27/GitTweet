@@ -106,13 +106,16 @@ router.post('/post-tweet', requireTwitter, async (req, res, next) => {
     res.json({ success: true, tweet_id: result.id, tweet_url: tweetUrl });
 
     // Persist to DB in the background — don't block the response
-    const login = req.session.github?.user?.login;
-    if (repo && login) {
+    const userId = req.session.userId ?? null;
+    const login = req.session.github?.user?.login ?? null;
+    if (repo && (userId || login)) {
       const resolvedTone = tone ?? 'default';
-      db.saveTweet({ githubLogin: login, text, tweetUrl, repo, tone: resolvedTone })
+      db.saveTweet({ userId, githubLogin: login, text, tweetUrl, repo, tone: resolvedTone })
         .catch((e) => console.error('[db] saveTweet failed:', e.message));
-      db.upsertPreferences(login, { defaultTone: resolvedTone, defaultRepo: repo })
-        .catch((e) => console.error('[db] upsertPreferences failed:', e.message));
+      if (userId) {
+        db.upsertPreferences(userId, { defaultTone: resolvedTone, defaultRepo: repo })
+          .catch((e) => console.error('[db] upsertPreferences failed:', e.message));
+      }
     }
   } catch (err) {
     next(err);
@@ -123,8 +126,9 @@ router.post('/post-tweet', requireTwitter, async (req, res, next) => {
 
 router.get('/history', requireGitHub, async (req, res, next) => {
   try {
-    const login = req.session.github.user.login;
-    const rows = await db.getTweets(login);
+    const userId = req.session.userId;
+    if (!userId) return res.json({ tweets: [], enabled: db.isEnabled() });
+    const rows = await db.getTweets(userId);
     const tweets = rows.map((r) => ({
       id: r.id,
       text: r.text,
@@ -141,8 +145,8 @@ router.get('/history', requireGitHub, async (req, res, next) => {
 
 router.delete('/history', requireGitHub, async (req, res, next) => {
   try {
-    const login = req.session.github.user.login;
-    await db.clearTweets(login);
+    const userId = req.session.userId;
+    if (userId) await db.clearTweets(userId);
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -153,8 +157,9 @@ router.delete('/history', requireGitHub, async (req, res, next) => {
 
 router.get('/preferences', requireGitHub, async (req, res, next) => {
   try {
-    const login = req.session.github.user.login;
-    const prefs = await db.getPreferences(login);
+    const userId = req.session.userId;
+    if (!userId) return res.json({ defaultTone: 'default', defaultRepo: null });
+    const prefs = await db.getPreferences(userId);
     res.json({
       defaultTone: prefs?.default_tone ?? 'default',
       defaultRepo: prefs?.default_repo ?? null,

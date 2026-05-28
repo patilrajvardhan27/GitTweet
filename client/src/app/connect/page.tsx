@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Spinner } from '@/components/ui/Spinner';
+import { api } from '@/lib/api';
 
 function Logo() {
   return (
@@ -46,13 +47,23 @@ const checkIcon = (
 
 export default function ConnectPage() {
   const router = useRouter();
-  const { github, twitter, loading } = useAuth();
+  const { google, github, twitter, loading, refresh } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    if (!loading && github && twitter) {
-      router.replace('/dashboard');
+    if (!loading && !google) {
+      router.replace('/');
     }
-  }, [loading, github, twitter, router]);
+  }, [loading, google, router]);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await api.post('/auth/logout', {});
+    } finally {
+      router.replace('/');
+    }
+  }
 
   if (loading) {
     return (
@@ -61,6 +72,8 @@ export default function ConnectPage() {
       </div>
     );
   }
+
+  if (!google) return null;
 
   const githubAvatar = github?.avatar_url ?? null;
   const githubName = github?.name ?? github?.login ?? '';
@@ -94,6 +107,41 @@ export default function ConnectPage() {
               Link GitHub to fetch your commits. Connect X to post your tweets.
               GitHub is required — X is optional but needed for posting.
             </p>
+          </div>
+
+          {/* Google signed-in banner */}
+          <div className="rounded-xl border border-green/30 bg-green/5 p-4 mb-6 flex items-center gap-3">
+            {google.picture ? (
+              <Image
+                src={google.picture}
+                alt={google.name}
+                width={36}
+                height={36}
+                className="rounded-full shrink-0"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-bg-elevated flex items-center justify-center text-text-3 text-sm font-display shrink-0">
+                {google.name[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-text-1 truncate">{google.name}</p>
+              <p className="text-xs text-text-3 truncate">{google.email}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-green font-medium flex items-center gap-1">
+                {checkIcon}
+                Signed in
+              </span>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="text-xs text-text-3 hover:text-red transition-colors duration-150 ml-2"
+                title="Sign out"
+              >
+                {loggingOut ? <Spinner size={12} className="text-text-3" /> : 'Sign out'}
+              </button>
+            </div>
           </div>
 
           {/* Cards */}

@@ -1,3 +1,10 @@
+export interface GoogleUser {
+  id: string;
+  email: string;
+  name: string;
+  picture: string;
+}
+
 export interface GithubUser {
   login: string;
   name: string | null;
@@ -12,6 +19,7 @@ export interface TwitterUser {
 }
 
 export interface AuthStatus {
+  google: GoogleUser | null;
   github: GithubUser | null;
   twitter: TwitterUser | null;
 }

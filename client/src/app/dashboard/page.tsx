@@ -26,7 +26,7 @@ function toDateInput(date: Date): string {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { github, twitter, loading: authLoading, refresh: refreshAuth } = useAuth();
+  const { google, github, twitter, loading: authLoading, refresh: refreshAuth } = useAuth();
 
   const { repos, commits, repoMeta, loading: commitsLoading, error: commitsError, fetchCommits } =
     useCommits();
@@ -53,12 +53,14 @@ export default function DashboardPage() {
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
 
-  // Redirect to connect if not authed
+  // Redirect based on auth state
   useEffect(() => {
-    if (!authLoading && !github) {
+    if (!authLoading && !google) {
+      router.replace('/');
+    } else if (!authLoading && !github) {
       router.replace('/connect');
     }
-  }, [authLoading, github, router]);
+  }, [authLoading, google, github, router]);
 
   // Load preferences and history from server
   useEffect(() => {
@@ -178,18 +180,25 @@ export default function DashboardPage() {
     );
   }
 
-  if (!github) return null;
+  if (!google || !github) return null;
 
   const selectedCommits = commits.filter((c) => selected.has(c.sha));
 
+  async function handleLogout() {
+    await api.post('/auth/logout', {});
+    router.replace('/');
+  }
+
   return (
     <Layout
+      google={google}
       github={github}
       twitter={twitter}
       onDisconnect={async (provider) => {
         await refreshAuth();
-        if (provider === 'github') router.replace('/');
+        if (provider === 'github') router.replace('/connect');
       }}
+      onLogout={handleLogout}
     >
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
         {/* Step 1 — Repository */}

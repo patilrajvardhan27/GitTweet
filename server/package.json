@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
+    "@supabase/supabase-js": "^2.106.2",
     "axios": "^1.7.2",
     "connect-redis": "^7.1.1",
     "cors": "^2.8.5",

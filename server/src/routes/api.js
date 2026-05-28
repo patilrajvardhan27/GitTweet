@@ -5,6 +5,7 @@ const { requireGitHub, requireTwitter } = require('../middleware/requireAuth');
 const github = require('../services/github');
 const twitter = require('../services/twitter');
 const claude = require('../services/claude');
+const db = require('../services/supabase');
 
 const router = express.Router();
 
@@ -84,7 +85,7 @@ router.post('/generate-tweet', async (req, res, next) => {
 
 router.post('/post-tweet', requireTwitter, async (req, res, next) => {
   try {
-    const { text } = req.body;
+    const { text, repo, tone } = req.body;
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'text is required' });
@@ -103,6 +104,61 @@ router.post('/post-tweet', requireTwitter, async (req, res, next) => {
 
     const tweetUrl = `https://twitter.com/i/web/status/${result.id}`;
     res.json({ success: true, tweet_id: result.id, tweet_url: tweetUrl });
+
+    // Persist to DB in the background — don't block the response
+    const login = req.session.github?.user?.login;
+    if (repo && login) {
+      const resolvedTone = tone ?? 'default';
+      db.saveTweet({ githubLogin: login, text, tweetUrl, repo, tone: resolvedTone })
+        .catch((e) => console.error('[db] saveTweet failed:', e.message));
+      db.upsertPreferences(login, { defaultTone: resolvedTone, defaultRepo: repo })
+        .catch((e) => console.error('[db] upsertPreferences failed:', e.message));
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Tweet History ────────────────────────────────────────────────────────────
+
+router.get('/history', requireGitHub, async (req, res, next) => {
+  try {
+    const login = req.session.github.user.login;
+    const rows = await db.getTweets(login);
+    const tweets = rows.map((r) => ({
+      id: r.id,
+      text: r.text,
+      url: r.tweet_url,
+      repo: r.repo,
+      date: r.created_at,
+      tone: r.tone,
+    }));
+    res.json({ tweets, enabled: db.isEnabled() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/history', requireGitHub, async (req, res, next) => {
+  try {
+    const login = req.session.github.user.login;
+    await db.clearTweets(login);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Preferences ─────────────────────────────────────────────────────────────
+
+router.get('/preferences', requireGitHub, async (req, res, next) => {
+  try {
+    const login = req.session.github.user.login;
+    const prefs = await db.getPreferences(login);
+    res.json({
+      defaultTone: prefs?.default_tone ?? 'default',
+      defaultRepo: prefs?.default_repo ?? null,
+    });
   } catch (err) {
     next(err);
   }

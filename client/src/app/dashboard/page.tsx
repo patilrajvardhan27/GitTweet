@@ -13,9 +13,6 @@ import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
 import type { Commit, TweetTone, TweetHistoryItem } from '@/types';
 
-const HISTORY_KEY = 'gittweet_history';
-const MAX_HISTORY = 20;
-
 const TONES: { value: TweetTone; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 'casual', label: 'Casual' },
@@ -56,21 +53,30 @@ export default function DashboardPage() {
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
 
+  // Redirect to connect if not authed
   useEffect(() => {
     if (!authLoading && !github) {
       router.replace('/connect');
     }
   }, [authLoading, github, router]);
 
+  // Load preferences and history from server
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(HISTORY_KEY);
-      if (saved) setHistory(JSON.parse(saved));
-    } catch {
-      // ignore corrupt storage
-    }
-  }, []);
+    if (!github) return;
 
+    api.get<{ defaultTone: string; defaultRepo: string | null }>('/api/preferences')
+      .then((prefs) => {
+        if (prefs.defaultTone) setTone(prefs.defaultTone as TweetTone);
+        if (prefs.defaultRepo) setRepoInput(prefs.defaultRepo);
+      })
+      .catch(() => {});
+
+    api.get<{ tweets: TweetHistoryItem[] }>('/api/history')
+      .then(({ tweets }) => setHistory(tweets))
+      .catch(() => {});
+  }, [github]);
+
+  // Reset selection when commits change
   useEffect(() => {
     setSelected(new Set(commits.map((c) => c.sha)));
   }, [commits]);
@@ -132,11 +138,12 @@ export default function DashboardPage() {
     try {
       const res = await api.post<{ success: boolean; tweet_id: string; tweet_url: string }>(
         '/api/post-tweet',
-        { text: tweet },
+        { text: tweet, repo: repoInput, tone },
       );
       setPosted(true);
       setPostedUrl(res.tweet_url);
 
+      // Optimistically prepend to local history; server has already persisted it
       const item: TweetHistoryItem = {
         id: Date.now().toString(),
         text: tweet,
@@ -145,9 +152,7 @@ export default function DashboardPage() {
         date: new Date().toISOString(),
         tone,
       };
-      const updated = [item, ...history].slice(0, MAX_HISTORY);
-      setHistory(updated);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      setHistory((prev) => [item, ...prev].slice(0, 20));
     } catch (err) {
       setPostError(err instanceof Error ? err.message : 'Failed to post tweet');
     } finally {
@@ -155,9 +160,14 @@ export default function DashboardPage() {
     }
   }
 
-  function handleClearHistory() {
-    setHistory([]);
-    localStorage.removeItem(HISTORY_KEY);
+  async function handleClearHistory() {
+    try {
+      await api.delete('/api/history');
+      setHistory([]);
+    } catch {
+      // silently ignore — history will clear on next load
+      setHistory([]);
+    }
   }
 
   if (authLoading) {

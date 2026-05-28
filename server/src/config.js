@@ -40,6 +40,10 @@ const config = {
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
   },
+  supabase: {
+    url: process.env.SUPABASE_URL ?? '',
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+  },
   clientUrl: process.env.CLIENT_URL ?? 'http://localhost:3000',
   serverUrl: process.env.SERVER_URL ?? 'http://localhost:3001',
   redisUrl: process.env.REDIS_URL,

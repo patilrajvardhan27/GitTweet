@@ -45,3 +45,14 @@ export interface CommitsResponse {
   commits: Commit[];
   repo: RepoMeta;
 }
+
+export type TweetTone = 'default' | 'casual' | 'technical' | 'motivational';
+
+export interface TweetHistoryItem {
+  id: string;
+  text: string;
+  url: string;
+  repo: string;
+  date: string;
+  tone: TweetTone;
+}

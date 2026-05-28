@@ -22,7 +22,7 @@ export function CommitList({ commits, selected, onToggle, onToggleAll }: CommitL
   if (commits.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-bg-surface px-5 py-8 text-center">
-        <p className="text-text-3 text-sm">No commits found in the last 7 days for this repository.</p>
+        <p className="text-text-3 text-sm">No commits found for the selected date range.</p>
       </div>
     );
   }

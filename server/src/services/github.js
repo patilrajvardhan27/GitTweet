@@ -49,13 +49,16 @@ async function getRepos(token) {
  * @param {string} token
  * @param {string} repo  e.g. "owner/name"
  * @param {string} since  ISO 8601 string
+ * @param {string} [until]  ISO 8601 string (optional)
  * @returns {Promise<{ commits: Array, repo: object }>}
  */
-async function getCommits(token, repo, since) {
+async function getCommits(token, repo, since, until) {
   const gh = client(token);
+  const commitParams = { since, per_page: 100 };
+  if (until) commitParams.until = until;
 
   const [commitsRes, repoRes] = await Promise.all([
-    gh.get(`/repos/${repo}/commits`, { params: { since, per_page: 100 } }),
+    gh.get(`/repos/${repo}/commits`, { params: commitParams }),
     gh.get(`/repos/${repo}`),
   ]);
 

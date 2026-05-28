@@ -5,17 +5,27 @@ const config = require('../config');
 
 const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
 
+const TONE_RULES = {
+  casual: 'Write in a casual, friendly tone — contractions welcome, like chatting with a dev friend.',
+  technical: 'Write in a precise, technical tone — mention specific patterns, tools, or approaches used.',
+  motivational: 'Write in an uplifting, motivational tone — celebrate the win and inspire others building in public.',
+  default: 'Sound like a real developer, not a marketing bot.',
+};
+
 /**
  * @param {{ sha: string, message: string, author: string, date: string }[]} commits
  * @param {string} repoName
  * @param {string|null} repoDescription
  * @param {string|null} context
+ * @param {'default'|'casual'|'technical'|'motivational'} [tone]
  * @returns {Promise<string>}
  */
-async function generateTweet(commits, repoName, repoDescription, context) {
+async function generateTweet(commits, repoName, repoDescription, context, tone = 'default') {
   const commitLines = commits
     .map((c) => `- ${c.message} (${c.sha.slice(0, 7)})`)
     .join('\n');
+
+  const toneRule = TONE_RULES[tone] ?? TONE_RULES.default;
 
   const prompt = [
     'You are a developer sharing daily progress on social media. Write one authentic, engaging tweet about today\'s GitHub commits.',
@@ -29,7 +39,7 @@ async function generateTweet(commits, repoName, repoDescription, context) {
     '',
     'Rules:',
     '- Maximum 255 characters (reserve space for hashtags)',
-    '- Sound like a real developer, not a marketing bot',
+    `- ${toneRule}`,
     '- Focus on what changed — what was built, fixed, or improved',
     '- End with 2–3 relevant hashtags (choose from: #buildinpublic #indiedev #coding #devlog #opensource #webdev #100daysofcode)',
     '- Do not wrap in quotes',

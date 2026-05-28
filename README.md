@@ -108,6 +108,45 @@ Also update the GitHub OAuth App's homepage URL to your Vercel URL.
 
 ---
 
+## Scope of improvements
+
+### Quick wins
+
+- **Tweet history** — nothing is saved after posting; add localStorage or a simple file-based store
+- **OAuth error messages** — failures silently redirect with `?error=` in the URL but show nothing to the user
+- **Refresh button** — no way to re-fetch commits after the initial load without a page refresh
+- **Date range picker** — date window is hardcoded; let users pick a custom range
+- **Tweet tone/style selector** — same Claude prompt for everyone; add options like "casual", "technical", "motivational"
+
+### UX & product
+
+- **Repos loading state** — `reposLoading` state exists but is never shown in the UI
+- **Character limit feedback during generation** — the 280-char limit is only checked on post, not while generating
+- **Multi-repo support** — can only view one repo at a time; switching clears everything
+- **Step flow clarity** — users can't tell if context goes before or after generation
+
+### Reliability
+
+- **No retry logic** — a single timeout on GitHub/Twitter API calls results in a permanent error
+- **GitHub token expiry not handled** — Twitter has refresh logic but GitHub doesn't; 401s fail silently
+- **Rate limits ignored** — 429 responses from GitHub, Twitter, and Claude all fall through as generic errors
+- **Redis optional but risky** — app silently falls back to MemoryStore in production, which loses sessions on restart
+
+### Security
+
+- **No CSRF protection** on `POST /api/generate-tweet` and `POST /api/post-tweet`
+- **Commit messages passed raw to Claude** — no sanitization, potential for prompt injection
+- **Session secret defaults** in `config.js` should hard-fail in production, not just warn
+
+### Longer term
+
+- **No database** — all state is session-only; add PostgreSQL for tweet history, preferences, analytics
+- **No tests** — zero coverage on any critical path (OAuth, generation, posting)
+- **TypeScript on the server** — backend is plain JS, losing refactor safety
+- **Logging infrastructure** — only `console.log` used; no request IDs or structured logs
+
+---
+
 ## Environment variables reference
 
 | Variable | Description | Where to get it |

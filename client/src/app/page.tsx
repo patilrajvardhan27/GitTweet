@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -124,27 +124,47 @@ const features = [
   },
 ];
 
+const OAUTH_ERRORS: Record<string, string> = {
+  github_auth_failed: 'GitHub sign-in failed. Please try again.',
+  twitter_auth_failed: 'X (Twitter) sign-in failed. Please try again.',
+};
+
 export default function LandingPage() {
   const router = useRouter();
   const { github, twitter, loading } = useAuth();
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!loading && (github || twitter)) {
-      router.replace('/dashboard');
-    }
-  }, [loading, github, twitter, router]);
-
-  // Check for OAuth errors in URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('error')) {
-      // Could show a toast here — for now the error is visible in the URL
+    const errKey = params.get('error');
+    if (errKey) {
+      setOauthError(OAUTH_ERRORS[errKey] ?? 'Sign-in failed. Please try again.');
       window.history.replaceState({}, '', '/');
     }
   }, []);
 
+  useEffect(() => {
+    if (!oauthError && !loading && (github || twitter)) {
+      router.replace('/dashboard');
+    }
+  }, [loading, github, twitter, router, oauthError]);
+
   return (
     <div className="min-h-screen bg-bg-base">
+      {oauthError && (
+        <div className="bg-red/10 border-b border-red/20 px-6 py-3 flex items-center justify-between gap-4" role="alert">
+          <p className="text-sm text-red">{oauthError}</p>
+          <button
+            onClick={() => setOauthError(null)}
+            className="text-red/60 hover:text-red transition-colors duration-150 shrink-0"
+            aria-label="Dismiss error"
+          >
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+      )}
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-border bg-bg-base/80 backdrop-blur-sm" aria-label="Main navigation">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">

@@ -26,14 +26,17 @@ export function useCommits() {
     loadRepos();
   }, []);
 
-  async function fetchCommits(repo: string) {
+  async function fetchCommits(repo: string, since?: string, until?: string) {
     setLoading(true);
     setError(null);
     setCommits([]);
     setRepoMeta(null);
 
     try {
-      const data = await api.get<CommitsResponse>(`/api/commits?repo=${encodeURIComponent(repo)}`);
+      const params = new URLSearchParams({ repo });
+      if (since) params.set('since', since);
+      if (until) params.set('until', until);
+      const data = await api.get<CommitsResponse>(`/api/commits?${params}`);
       setCommits(data.commits);
       setRepoMeta(data.repo);
     } catch (err) {

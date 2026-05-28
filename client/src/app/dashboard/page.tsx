@@ -7,10 +7,25 @@ import { useCommits } from '@/hooks/useCommits';
 import { Layout } from '@/components/Layout';
 import { CommitList } from '@/components/CommitList';
 import { TweetPreview } from '@/components/TweetPreview';
+import { TweetHistory } from '@/components/TweetHistory';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
-import type { Commit } from '@/types';
+import type { Commit, TweetTone, TweetHistoryItem } from '@/types';
+
+const HISTORY_KEY = 'gittweet_history';
+const MAX_HISTORY = 20;
+
+const TONES: { value: TweetTone; label: string }[] = [
+  { value: 'default', label: 'Default' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'technical', label: 'Technical' },
+  { value: 'motivational', label: 'Motivational' },
+];
+
+function toDateInput(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -23,6 +38,12 @@ export default function DashboardPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hasFetched, setHasFetched] = useState(false);
   const [context, setContext] = useState('');
+  const [tone, setTone] = useState<TweetTone>('default');
+
+  const today = new Date();
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const [dateFrom, setDateFrom] = useState(toDateInput(sevenDaysAgo));
+  const [dateTo, setDateTo] = useState(toDateInput(today));
 
   const [tweet, setTweet] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -33,14 +54,23 @@ export default function DashboardPage() {
   const [postedUrl, setPostedUrl] = useState<string | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
 
-  // Redirect to landing if not authed and loading finished
+  const [history, setHistory] = useState<TweetHistoryItem[]>([]);
+
   useEffect(() => {
     if (!authLoading && !github) {
       router.replace('/connect');
     }
   }, [authLoading, github, router]);
 
-  // Reset selection when commits change
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_KEY);
+      if (saved) setHistory(JSON.parse(saved));
+    } catch {
+      // ignore corrupt storage
+    }
+  }, []);
+
   useEffect(() => {
     setSelected(new Set(commits.map((c) => c.sha)));
   }, [commits]);
@@ -65,7 +95,7 @@ export default function DashboardPage() {
     setTweet('');
     setPosted(false);
     setPostedUrl(null);
-    await fetchCommits(repoInput.trim());
+    await fetchCommits(repoInput.trim(), dateFrom, dateTo);
     setHasFetched(true);
   }
 
@@ -84,6 +114,7 @@ export default function DashboardPage() {
         repoName: repoMeta?.name ?? repoInput,
         repoDescription: repoMeta?.description ?? null,
         context: context.trim() || null,
+        tone,
       });
       setTweet(res.tweet);
     } catch (err) {
@@ -105,11 +136,28 @@ export default function DashboardPage() {
       );
       setPosted(true);
       setPostedUrl(res.tweet_url);
+
+      const item: TweetHistoryItem = {
+        id: Date.now().toString(),
+        text: tweet,
+        url: res.tweet_url,
+        repo: repoInput,
+        date: new Date().toISOString(),
+        tone,
+      };
+      const updated = [item, ...history].slice(0, MAX_HISTORY);
+      setHistory(updated);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
     } catch (err) {
       setPostError(err instanceof Error ? err.message : 'Failed to post tweet');
     } finally {
       setPosting(false);
     }
+  }
+
+  function handleClearHistory() {
+    setHistory([]);
+    localStorage.removeItem(HISTORY_KEY);
   }
 
   if (authLoading) {
@@ -171,6 +219,35 @@ export default function DashboardPage() {
             </Button>
           </div>
 
+          {/* Date range */}
+          <div className="flex items-center gap-3 mt-3">
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-xs text-text-3 shrink-0 w-7">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="flex-1 bg-bg-surface border border-border rounded-md px-3 py-2 text-xs
+                  text-text-1 focus:outline-none focus:border-border-hover transition-colors duration-150
+                  [color-scheme:dark]"
+              />
+            </div>
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-xs text-text-3 shrink-0 w-3">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom}
+                max={toDateInput(new Date())}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="flex-1 bg-bg-surface border border-border rounded-md px-3 py-2 text-xs
+                  text-text-1 focus:outline-none focus:border-border-hover transition-colors duration-150
+                  [color-scheme:dark]"
+              />
+            </div>
+          </div>
+
           {commitsError && (
             <p className="mt-2 text-sm text-red" role="alert">
               {commitsError}
@@ -181,10 +258,34 @@ export default function DashboardPage() {
         {/* Step 2 — Commits */}
         {hasFetched && (
           <section aria-labelledby="step-commits">
-            <h2 id="step-commits" className="text-lg font-display font-semibold text-text-1 mb-4">
-              <span className="text-text-3 font-mono text-sm mr-2">02</span>
-              Select commits
-            </h2>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 id="step-commits" className="text-lg font-display font-semibold text-text-1">
+                <span className="text-text-3 font-mono text-sm mr-2">02</span>
+                Select commits
+              </h2>
+              <button
+                onClick={handleFetchCommits}
+                disabled={commitsLoading}
+                className="ml-auto text-text-3 hover:text-text-2 disabled:opacity-40 transition-colors duration-150"
+                aria-label="Refresh commits"
+                title="Refresh commits"
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                  className={commitsLoading ? 'animate-spin' : ''}
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
             <CommitList
               commits={commits}
               selected={selected}
@@ -194,7 +295,7 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Step 3 — Context + Generate */}
+        {/* Step 3 — Context + Tone + Generate */}
         {hasFetched && (
           <section aria-labelledby="step-context">
             <h2 id="step-context" className="text-lg font-display font-semibold text-text-1 mb-4">
@@ -211,6 +312,26 @@ export default function DashboardPage() {
                 text-text-1 placeholder:text-text-3 focus:outline-none focus:border-border-hover
                 transition-colors duration-150 mb-4"
             />
+
+            {/* Tone selector */}
+            <div className="mb-4">
+              <p className="text-xs text-text-3 mb-2">Tone</p>
+              <div className="flex items-center gap-1 p-1 bg-bg-elevated rounded-lg border border-border">
+                {TONES.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setTone(value)}
+                    className={`flex-1 text-xs px-2 py-1.5 rounded-md transition-all duration-150 ${
+                      tone === value
+                        ? 'bg-bg-surface text-text-1 shadow-sm border border-border font-medium'
+                        : 'text-text-3 hover:text-text-2'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <Button
               variant="primary"
@@ -263,6 +384,13 @@ export default function DashboardPage() {
               </p>
             )}
           </section>
+        )}
+
+        {/* Tweet History */}
+        {history.length > 0 && (
+          <div className="border-t border-border pt-6">
+            <TweetHistory items={history} onClear={handleClearHistory} />
+          </div>
         )}
       </div>
     </Layout>

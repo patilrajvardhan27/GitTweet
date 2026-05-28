@@ -23,18 +23,26 @@ router.get('/repos', requireGitHub, async (req, res, next) => {
 
 // ─── Commits ─────────────────────────────────────────────────────────────────
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 router.get('/commits', requireGitHub, async (req, res, next) => {
   try {
-    const { repo } = req.query;
+    const { repo, since: sinceParam, until: untilParam } = req.query;
 
     if (!repo || !REPO_REGEX.test(repo)) {
       return res.status(400).json({ error: 'Invalid repo parameter. Expected format: owner/name' });
     }
 
     const now = new Date();
-    const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const since = (sinceParam && DATE_RE.test(sinceParam))
+      ? new Date(sinceParam + 'T00:00:00Z').toISOString()
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const data = await github.getCommits(req.session.github.accessToken, repo, since);
+    const until = (untilParam && DATE_RE.test(untilParam))
+      ? new Date(untilParam + 'T23:59:59Z').toISOString()
+      : undefined;
+
+    const data = await github.getCommits(req.session.github.accessToken, repo, since, until);
     res.json(data);
   } catch (err) {
     next(err);
@@ -45,7 +53,7 @@ router.get('/commits', requireGitHub, async (req, res, next) => {
 
 router.post('/generate-tweet', async (req, res, next) => {
   try {
-    const { commits, repoName, repoDescription, context } = req.body;
+    const { commits, repoName, repoDescription, context, tone } = req.body;
 
     if (!Array.isArray(commits) || commits.length === 0) {
       return res.status(400).json({ error: 'commits must be a non-empty array' });
@@ -55,11 +63,15 @@ router.post('/generate-tweet', async (req, res, next) => {
       return res.status(400).json({ error: 'repoName is required' });
     }
 
+    const validTones = ['default', 'casual', 'technical', 'motivational'];
+    const resolvedTone = validTones.includes(tone) ? tone : 'default';
+
     const tweet = await claude.generateTweet(
       commits,
       repoName,
       repoDescription ?? null,
       context ?? null,
+      resolvedTone,
     );
 
     res.json({ tweet });

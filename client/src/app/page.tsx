@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Spinner } from '@/components/ui/Spinner';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function Logo() {
   return (
@@ -196,9 +197,12 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-bg-base/80 backdrop-blur-sm" aria-label="Main navigation">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
           <Logo />
-          <a href="#how" className="text-xs text-text-3 hover:text-text-2 transition-colors duration-150">
-            How it works
-          </a>
+          <div className="flex items-center gap-2">
+            <a href="#how" className="text-xs text-text-3 hover:text-text-2 transition-colors duration-150 mr-1">
+              How it works
+            </a>
+            <ThemeToggle />
+          </div>
         </div>
       </nav>
 

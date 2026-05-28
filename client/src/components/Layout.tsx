@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { AccountCard } from './AccountCard';
+import { ThemeToggle } from './ThemeToggle';
 import type { GoogleUser, GithubUser, TwitterUser } from '@/types';
 
 interface LayoutProps {
@@ -38,8 +39,9 @@ export function Layout({ google, github, twitter, onDisconnect, onLogout, childr
     <div className="flex h-screen overflow-hidden bg-bg-base">
       {/* Sidebar */}
       <aside className="w-[280px] shrink-0 flex flex-col border-r border-border bg-bg-surface overflow-y-auto">
-        <div className="p-5 border-b border-border">
+        <div className="p-5 border-b border-border flex items-center justify-between">
           <Logo />
+          <ThemeToggle />
         </div>
 
         <nav className="flex flex-col gap-3 p-4 flex-1">

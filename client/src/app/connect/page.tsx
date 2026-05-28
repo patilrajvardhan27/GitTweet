@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function Logo() {
   return (
@@ -86,12 +87,15 @@ export default function ConnectPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-bg-base/80 backdrop-blur-sm">
         <div className="max-w-lg mx-auto px-6 h-14 flex items-center justify-between">
           <Logo />
-          <Link
-            href="/"
-            className="text-xs text-text-3 hover:text-text-2 transition-colors duration-150"
-          >
-            ← Back
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="text-xs text-text-3 hover:text-text-2 transition-colors duration-150 mr-1"
+            >
+              ← Back
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
       </nav>
 

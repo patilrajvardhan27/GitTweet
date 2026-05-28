@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ── Dark theme (default) ───────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
   --color-bg-base:      #07070D;
   --color-bg-surface:   #0D0D18;
   --color-bg-elevated:  #131320;
@@ -25,6 +27,27 @@
   --radius-lg:   16px;
   --radius-xl:   24px;
   --transition:  0.15s ease;
+}
+
+/* ── Light theme ────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg-base:      #F5F5FA;
+  --color-bg-surface:   #FFFFFF;
+  --color-bg-elevated:  #ECEEF8;
+  --color-border:       rgba(0, 0, 0, 0.08);
+  --color-border-hover: rgba(0, 0, 0, 0.16);
+  --color-text-1:       #07070D;
+  --color-text-2:       #52526E;
+  --color-text-3:       #9898B8;
+  --color-green:        #00965A;
+  --color-green-bg:     rgba(0, 150, 90, 0.08);
+  --color-green-border: rgba(0, 150, 90, 0.22);
+  --color-blue:         #2563EB;
+  --color-blue-bg:      rgba(37, 99, 235, 0.08);
+  --color-red:          #DC2626;
+  --color-red-bg:       rgba(220, 38, 38, 0.08);
+  --color-amber:        #D97706;
+  --color-amber-bg:     rgba(217, 119, 6, 0.08);
 }
 
 @layer base {
@@ -86,7 +109,7 @@
 
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, #fff 0%, var(--color-text-2) 100%);
+    background: linear-gradient(135deg, var(--color-text-1) 0%, var(--color-text-2) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

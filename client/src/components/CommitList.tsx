@@ -12,14 +12,17 @@ interface CommitListProps {
 
 function formatTime(dateStr: string) {
   const d = new Date(dateStr);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 export function CommitList({ commits, selected, onToggle, onToggleAll }: CommitListProps) {
   if (commits.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-bg-surface px-5 py-8 text-center">
-        <p className="text-text-3 text-sm">No commits found today for this repository.</p>
+        <p className="text-text-3 text-sm">No commits found in the last 7 days for this repository.</p>
       </div>
     );
   }
@@ -31,7 +34,7 @@ export function CommitList({ commits, selected, onToggle, onToggleAll }: CommitL
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-text-1">Today&apos;s commits</span>
+          <span className="text-sm font-medium text-text-1">Recent commits</span>
           <Badge variant={selected.size > 0 ? 'blue' : 'neutral'}>
             {selected.size} of {commits.length} selected
           </Badge>

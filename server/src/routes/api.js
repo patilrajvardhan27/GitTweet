@@ -32,7 +32,7 @@ router.get('/commits', requireGitHub, async (req, res, next) => {
     }
 
     const now = new Date();
-    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const data = await github.getCommits(req.session.github.accessToken, repo, since);
     res.json(data);

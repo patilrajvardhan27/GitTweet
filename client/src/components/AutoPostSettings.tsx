@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import type { Repo, TweetTone, AutoPostPreferences } from '@/types';
@@ -42,6 +42,15 @@ export function AutoPostSettings({ repos, initial }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync state when saved preferences arrive from the server
+  useEffect(() => {
+    setEnabled(initial.autoPostEnabled);
+    setSelectedRepos(initial.autoPostRepos);
+    setTone(initial.autoPostTone);
+    setLocalHour(utcToLocal(initial.autoPostHour));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.autoPostEnabled, initial.autoPostTone, initial.autoPostHour, initial.autoPostRepos.join(',')]);
 
   function toggleRepo(fullName: string) {
     setSelectedRepos((prev) =>

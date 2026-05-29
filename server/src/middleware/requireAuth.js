@@ -1,6 +1,14 @@
 'use strict';
 
 /** @type {import('express').RequestHandler} */
+function requireAuth(req, res, next) {
+  if (!req.session.userId && !req.session.google) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  next();
+}
+
+/** @type {import('express').RequestHandler} */
 function requireGitHub(req, res, next) {
   if (!req.session.github) {
     return res.status(401).json({ error: 'GitHub account not connected' });
@@ -16,4 +24,4 @@ function requireTwitter(req, res, next) {
   next();
 }
 
-module.exports = { requireGitHub, requireTwitter };
+module.exports = { requireAuth, requireGitHub, requireTwitter };

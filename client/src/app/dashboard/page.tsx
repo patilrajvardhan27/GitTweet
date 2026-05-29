@@ -8,10 +8,11 @@ import { Layout } from '@/components/Layout';
 import { CommitList } from '@/components/CommitList';
 import { TweetPreview } from '@/components/TweetPreview';
 import { TweetHistory } from '@/components/TweetHistory';
+import { AutoPostSettings } from '@/components/AutoPostSettings';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
-import type { Commit, TweetTone, TweetHistoryItem } from '@/types';
+import type { Commit, TweetTone, TweetHistoryItem, AutoPostPreferences } from '@/types';
 
 const TONES: { value: TweetTone; label: string }[] = [
   { value: 'default', label: 'Default' },
@@ -22,6 +23,23 @@ const TONES: { value: TweetTone; label: string }[] = [
 
 function toDateInput(date: Date): string {
   return date.toISOString().split('T')[0];
+}
+
+function StepBadge({ n, done }: { n: number; done?: boolean }) {
+  if (done) {
+    return (
+      <span className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-green/10 border border-green/25 shrink-0">
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+          <path d="M2 5l2.5 2.5L8 3" stroke="var(--color-green)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-full border border-border text-[10px] font-mono font-semibold text-text-3 shrink-0">
+      {String(n).padStart(2, '0')}
+    </span>
+  );
 }
 
 export default function DashboardPage() {
@@ -52,8 +70,13 @@ export default function DashboardPage() {
   const [postError, setPostError] = useState<string | null>(null);
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
+  const [autoPostPrefs, setAutoPostPrefs] = useState<AutoPostPreferences>({
+    autoPostEnabled: false,
+    autoPostRepos: [],
+    autoPostTone: 'default',
+    autoPostHour: 9,
+  });
 
-  // Redirect based on auth state
   useEffect(() => {
     if (!authLoading && !google) {
       router.replace('/');
@@ -62,14 +85,19 @@ export default function DashboardPage() {
     }
   }, [authLoading, google, github, router]);
 
-  // Load preferences and history from server
   useEffect(() => {
     if (!github) return;
 
-    api.get<{ defaultTone: string; defaultRepo: string | null }>('/api/preferences')
+    api.get<{ defaultTone: string; defaultRepo: string | null; autoPostEnabled: boolean; autoPostRepos: string[]; autoPostTone: string; autoPostHour: number }>('/api/preferences')
       .then((prefs) => {
         if (prefs.defaultTone) setTone(prefs.defaultTone as TweetTone);
         if (prefs.defaultRepo) setRepoInput(prefs.defaultRepo);
+        setAutoPostPrefs({
+          autoPostEnabled: prefs.autoPostEnabled ?? false,
+          autoPostRepos: prefs.autoPostRepos ?? [],
+          autoPostTone: (prefs.autoPostTone as TweetTone) ?? 'default',
+          autoPostHour: prefs.autoPostHour ?? 9,
+        });
       })
       .catch(() => {});
 
@@ -78,7 +106,6 @@ export default function DashboardPage() {
       .catch(() => {});
   }, [github]);
 
-  // Reset selection when commits change
   useEffect(() => {
     setSelected(new Set(commits.map((c) => c.sha)));
   }, [commits]);
@@ -145,7 +172,6 @@ export default function DashboardPage() {
       setPosted(true);
       setPostedUrl(res.tweet_url);
 
-      // Optimistically prepend to local history; server has already persisted it
       const item: TweetHistoryItem = {
         id: Date.now().toString(),
         text: tweet,
@@ -167,7 +193,6 @@ export default function DashboardPage() {
       await api.delete('/api/history');
       setHistory([]);
     } catch {
-      // silently ignore — history will clear on next load
       setHistory([]);
     }
   }
@@ -189,6 +214,12 @@ export default function DashboardPage() {
     router.replace('/');
   }
 
+  const inputBase =
+    'w-full bg-bg-base border border-border rounded-lg px-3.5 py-2.5 text-sm text-text-1 placeholder:text-text-3 focus:outline-none focus:ring-1 focus:ring-border-hover focus:border-border-hover transition-all duration-150';
+
+  const cardHeader =
+    'px-5 py-3.5 border-b border-border flex items-center gap-2.5';
+
   return (
     <Layout
       google={google}
@@ -200,217 +231,233 @@ export default function DashboardPage() {
       }}
       onLogout={handleLogout}
     >
-      <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-[660px] mx-auto px-6 py-10 space-y-3">
+
         {/* Step 1 — Repository */}
-        <section aria-labelledby="step-repo">
-          <h2 id="step-repo" className="text-lg font-display font-semibold text-text-1 mb-4">
-            <span className="text-text-3 font-mono text-sm mr-2">01</span>
-            Pick a repository
-          </h2>
-
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <input
-                list="repos-datalist"
-                value={repoInput}
-                onChange={(e) => setRepoInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleFetchCommits()}
-                placeholder="owner/repo"
-                className="w-full bg-bg-surface border border-border rounded-md px-4 py-2.5 text-sm
-                  text-text-1 placeholder:text-text-3 focus:outline-none focus:border-border-hover
-                  transition-colors duration-150"
-                aria-label="Repository name (owner/repo)"
-              />
-              <datalist id="repos-datalist">
-                {repos.map((r) => (
-                  <option key={r.full_name} value={r.full_name} />
-                ))}
-              </datalist>
-            </div>
-            <Button
-              variant="ghost"
-              size="md"
-              loading={commitsLoading}
-              disabled={!repoInput.trim() || commitsLoading}
-              onClick={handleFetchCommits}
-            >
-              Fetch commits
-            </Button>
+        <section aria-labelledby="step-repo" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+          <div className={cardHeader}>
+            <StepBadge n={1} done={hasFetched} />
+            <h2 id="step-repo" className="text-sm font-semibold text-text-1">
+              Pick a repository
+            </h2>
           </div>
 
-          {/* Date range */}
-          <div className="flex items-center gap-3 mt-3">
-            <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs text-text-3 shrink-0 w-7">From</label>
-              <input
-                type="date"
-                value={dateFrom}
-                max={dateTo}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="flex-1 bg-bg-surface border border-border rounded-md px-3 py-2 text-xs
-                  text-text-1 focus:outline-none focus:border-border-hover transition-colors duration-150
-                  [color-scheme:dark]"
-              />
+          <div className="px-5 py-4 space-y-3">
+            <div className="flex gap-2.5">
+              <div className="flex-1">
+                <input
+                  list="repos-datalist"
+                  value={repoInput}
+                  onChange={(e) => setRepoInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleFetchCommits()}
+                  placeholder="owner/repo"
+                  className={inputBase}
+                  aria-label="Repository name (owner/repo)"
+                />
+                <datalist id="repos-datalist">
+                  {repos.map((r) => (
+                    <option key={r.full_name} value={r.full_name} />
+                  ))}
+                </datalist>
+              </div>
+              <Button
+                variant="ghost"
+                size="md"
+                loading={commitsLoading}
+                disabled={!repoInput.trim() || commitsLoading}
+                onClick={handleFetchCommits}
+                className="shrink-0"
+              >
+                {commitsLoading ? 'Fetching…' : 'Fetch commits'}
+              </Button>
             </div>
-            <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs text-text-3 shrink-0 w-3">To</label>
-              <input
-                type="date"
-                value={dateTo}
-                min={dateFrom}
-                max={toDateInput(new Date())}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="flex-1 bg-bg-surface border border-border rounded-md px-3 py-2 text-xs
-                  text-text-1 focus:outline-none focus:border-border-hover transition-colors duration-150
-                  [color-scheme:dark]"
-              />
-            </div>
-          </div>
 
-          {commitsError && (
-            <p className="mt-2 text-sm text-red" role="alert">
-              {commitsError}
-            </p>
-          )}
+            {/* Date range */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-xs text-text-3 shrink-0">From</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="flex-1 bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-1 focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 [color-scheme:dark]"
+                />
+              </div>
+              <span className="text-text-3 text-xs shrink-0 select-none">→</span>
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom}
+                  max={toDateInput(new Date())}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="flex-1 bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-1 focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 [color-scheme:dark]"
+                />
+                <span className="text-xs text-text-3 shrink-0">To</span>
+              </div>
+            </div>
+
+            {commitsError && (
+              <p className="text-xs text-red" role="alert">{commitsError}</p>
+            )}
+          </div>
         </section>
 
         {/* Step 2 — Commits */}
         {hasFetched && (
-          <section aria-labelledby="step-commits">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 id="step-commits" className="text-lg font-display font-semibold text-text-1">
-                <span className="text-text-3 font-mono text-sm mr-2">02</span>
+          <section aria-labelledby="step-commits" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+            <div className={cardHeader}>
+              <StepBadge n={2} />
+              <h2 id="step-commits" className="text-sm font-semibold text-text-1 flex-1">
                 Select commits
+                {commits.length > 0 && (
+                  <span className="ml-2 text-xs text-text-3 font-mono font-normal">
+                    {selected.size}/{commits.length}
+                  </span>
+                )}
               </h2>
               <button
                 onClick={handleFetchCommits}
                 disabled={commitsLoading}
-                className="ml-auto text-text-3 hover:text-text-2 disabled:opacity-40 transition-colors duration-150"
+                className="text-text-3 hover:text-text-2 disabled:opacity-40 transition-colors duration-150 p-0.5"
                 aria-label="Refresh commits"
                 title="Refresh commits"
               >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                  className={commitsLoading ? 'animate-spin' : ''}
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
-                    clipRule="evenodd"
-                  />
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"
+                  className={commitsLoading ? 'animate-spin' : ''}>
+                  <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                 </svg>
               </button>
             </div>
-            <CommitList
-              commits={commits}
-              selected={selected}
-              onToggle={handleToggle}
-              onToggleAll={handleToggleAll}
-            />
+            <div className="px-5 py-4">
+              <CommitList
+                commits={commits}
+                selected={selected}
+                onToggle={handleToggle}
+                onToggleAll={handleToggleAll}
+              />
+            </div>
           </section>
         )}
 
         {/* Step 3 — Context + Tone + Generate */}
         {hasFetched && (
-          <section aria-labelledby="step-context">
-            <h2 id="step-context" className="text-lg font-display font-semibold text-text-1 mb-4">
-              <span className="text-text-3 font-mono text-sm mr-2">03</span>
-              Add context
-            </h2>
-
-            <input
-              type="text"
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              placeholder="What are you working on? (optional — helps make the tweet more specific)"
-              className="w-full bg-bg-surface border border-border rounded-md px-4 py-2.5 text-sm
-                text-text-1 placeholder:text-text-3 focus:outline-none focus:border-border-hover
-                transition-colors duration-150 mb-4"
-            />
-
-            {/* Tone selector */}
-            <div className="mb-4">
-              <p className="text-xs text-text-3 mb-2">Tone</p>
-              <div className="flex items-center gap-1 p-1 bg-bg-elevated rounded-lg border border-border">
-                {TONES.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setTone(value)}
-                    className={`flex-1 text-xs px-2 py-1.5 rounded-md transition-all duration-150 ${
-                      tone === value
-                        ? 'bg-bg-surface text-text-1 shadow-sm border border-border font-medium'
-                        : 'text-text-3 hover:text-text-2'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+          <section aria-labelledby="step-context" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+            <div className={cardHeader}>
+              <StepBadge n={3} />
+              <h2 id="step-context" className="text-sm font-semibold text-text-1">
+                Add context
+              </h2>
             </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              loading={generating}
-              disabled={selectedCommits.length === 0 || generating}
-              onClick={handleGenerate}
-              className="w-full"
-            >
-              {generating ? 'Generating…' : 'Generate tweet'}
-            </Button>
+            <div className="px-5 py-4 space-y-4">
+              <input
+                type="text"
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder="What are you working on? (optional)"
+                className={inputBase}
+              />
 
-            {generateError && (
-              <p className="mt-2 text-sm text-red" role="alert">
-                {generateError}
-              </p>
-            )}
+              <div>
+                <p className="text-[10px] text-text-3 uppercase tracking-widest font-semibold mb-2">Tone</p>
+                <div className="flex items-center gap-1 p-1 bg-bg-base rounded-lg border border-border">
+                  {TONES.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => setTone(value)}
+                      className={`flex-1 text-xs px-2 py-1.5 rounded-md transition-all duration-150 ${
+                        tone === value
+                          ? 'bg-bg-elevated text-text-1 border border-border-hover font-semibold shadow-sm'
+                          : 'text-text-3 hover:text-text-2'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Button
+                variant="primary"
+                size="md"
+                loading={generating}
+                disabled={selectedCommits.length === 0 || generating}
+                onClick={handleGenerate}
+                className="w-full"
+              >
+                {generating
+                  ? 'Generating…'
+                  : selectedCommits.length > 0
+                  ? `Generate tweet from ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
+                  : 'Generate tweet'}
+              </Button>
+
+              {generateError && (
+                <p className="text-sm text-red" role="alert">{generateError}</p>
+              )}
+            </div>
           </section>
         )}
 
         {/* Step 4 — Tweet Preview */}
         {(tweet || generating) && (
-          <section aria-labelledby="step-tweet">
-            <h2 id="step-tweet" className="text-lg font-display font-semibold text-text-1 mb-4">
-              <span className="text-text-3 font-mono text-sm mr-2">04</span>
-              Preview &amp; post
-            </h2>
+          <section aria-labelledby="step-tweet" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+            <div className={cardHeader}>
+              <StepBadge n={4} />
+              <h2 id="step-tweet" className="text-sm font-semibold text-text-1">
+                Preview &amp; post
+              </h2>
+            </div>
 
-            {generating ? (
-              <div className="rounded-lg border border-border bg-bg-surface px-5 py-8 flex items-center justify-center gap-3 text-text-3">
-                <Spinner size={18} />
-                <span className="text-sm">Generating your tweet…</span>
-              </div>
-            ) : (
-              <TweetPreview
-                tweet={tweet}
-                onChange={setTweet}
-                user={twitter}
-                onPost={handlePost}
-                onRegenerate={handleGenerate}
-                posting={posting}
-                posted={posted}
-                postedUrl={postedUrl}
-              />
-            )}
+            <div className="px-5 py-4">
+              {generating ? (
+                <div className="py-8 flex items-center justify-center gap-3 text-text-3">
+                  <Spinner size={18} />
+                  <span className="text-sm">Generating your tweet…</span>
+                </div>
+              ) : (
+                <TweetPreview
+                  tweet={tweet}
+                  onChange={setTweet}
+                  user={twitter}
+                  onPost={handlePost}
+                  onRegenerate={handleGenerate}
+                  posting={posting}
+                  posted={posted}
+                  postedUrl={postedUrl}
+                />
+              )}
 
-            {postError && (
-              <p className="mt-2 text-sm text-red" role="alert" aria-live="polite">
-                {postError}
-              </p>
-            )}
+              {postError && (
+                <p className="mt-3 text-sm text-red" role="alert" aria-live="polite">
+                  {postError}
+                </p>
+              )}
+            </div>
           </section>
         )}
 
         {/* Tweet History */}
         {history.length > 0 && (
-          <div className="border-t border-border pt-6">
+          <div className="pt-2">
             <TweetHistory items={history} onClear={handleClearHistory} />
           </div>
         )}
+
+        {/* Automation divider */}
+        <div className="flex items-center gap-3 pt-4">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[10px] font-semibold text-text-3 uppercase tracking-widest">
+            Automation
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        {/* Auto-post Settings */}
+        <AutoPostSettings repos={repos} initial={autoPostPrefs} />
+
       </div>
     </Layout>
   );

@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { requireGitHub, requireTwitter } = require('../middleware/requireAuth');
+const { requireAuth, requireGitHub, requireTwitter } = require('../middleware/requireAuth');
 const github = require('../services/github');
 const twitter = require('../services/twitter');
 const claude = require('../services/claude');
@@ -124,7 +124,7 @@ router.post('/post-tweet', requireTwitter, async (req, res, next) => {
 
 // ─── Tweet History ────────────────────────────────────────────────────────────
 
-router.get('/history', requireGitHub, async (req, res, next) => {
+router.get('/history', requireAuth, async (req, res, next) => {
   try {
     const userId = req.session.userId;
     if (!userId) return res.json({ tweets: [], enabled: db.isEnabled() });
@@ -143,7 +143,7 @@ router.get('/history', requireGitHub, async (req, res, next) => {
   }
 });
 
-router.delete('/history', requireGitHub, async (req, res, next) => {
+router.delete('/history', requireAuth, async (req, res, next) => {
   try {
     const userId = req.session.userId;
     if (userId) await db.clearTweets(userId);
@@ -155,15 +155,52 @@ router.delete('/history', requireGitHub, async (req, res, next) => {
 
 // ─── Preferences ─────────────────────────────────────────────────────────────
 
-router.get('/preferences', requireGitHub, async (req, res, next) => {
+router.get('/preferences', requireAuth, async (req, res, next) => {
   try {
     const userId = req.session.userId;
-    if (!userId) return res.json({ defaultTone: 'default', defaultRepo: null });
+    if (!userId) {
+      return res.json({
+        defaultTone: 'default',
+        defaultRepo: null,
+        autoPostEnabled: false,
+        autoPostRepos: [],
+        autoPostTone: 'default',
+        autoPostHour: 9,
+      });
+    }
     const prefs = await db.getPreferences(userId);
     res.json({
       defaultTone: prefs?.default_tone ?? 'default',
       defaultRepo: prefs?.default_repo ?? null,
+      autoPostEnabled: prefs?.auto_post_enabled ?? false,
+      autoPostRepos: prefs?.auto_post_repos ?? [],
+      autoPostTone: prefs?.auto_post_tone ?? 'default',
+      autoPostHour: prefs?.auto_post_hour ?? 9,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/preferences', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const { autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour } = req.body;
+
+    const validTones = ['default', 'casual', 'technical', 'motivational'];
+
+    const patch = {};
+    if (typeof autoPostEnabled === 'boolean') patch.autoPostEnabled = autoPostEnabled;
+    if (Array.isArray(autoPostRepos)) patch.autoPostRepos = autoPostRepos.filter((r) => typeof r === 'string');
+    if (validTones.includes(autoPostTone)) patch.autoPostTone = autoPostTone;
+    if (typeof autoPostHour === 'number' && autoPostHour >= 0 && autoPostHour <= 23) {
+      patch.autoPostHour = Math.floor(autoPostHour);
+    }
+
+    await db.upsertPreferences(userId, patch);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

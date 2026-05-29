@@ -126,6 +126,7 @@ router.get('/github/callback', async (req, res) => {
         username: user.login,
         name: user.name ?? user.login,
         avatarUrl: user.avatar_url ?? null,
+        accessToken,
       }).catch((e) => console.error('[db] linkAccount github failed:', e.message));
     }
 
@@ -206,6 +207,8 @@ router.get('/twitter/callback', async (req, res) => {
         username: user.username,
         name: user.name,
         avatarUrl: user.profile_image_url ?? null,
+        accessToken: access_token,
+        refreshToken: refresh_token,
       }).catch((e) => console.error('[db] linkAccount twitter failed:', e.message));
     }
 

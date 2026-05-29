@@ -42,6 +42,7 @@ async function generateTweet(commits, repoName, repoDescription, context, tone =
     `- ${toneRule}`,
     '- Focus on what changed — what was built, fixed, or improved',
     '- End with 2–3 relevant hashtags (choose from: #buildinpublic #indiedev #coding #devlog #opensource #webdev #100daysofcode)',
+    '- Do not use em dashes (—); use a comma, colon, or rephrase instead',
     '- Do not wrap in quotes',
     '- Do not add preamble or explanation — output only the tweet text',
   ]

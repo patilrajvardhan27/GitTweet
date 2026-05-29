@@ -64,3 +64,10 @@ export interface TweetHistoryItem {
   date: string;
   tone: TweetTone;
 }
+
+export interface AutoPostPreferences {
+  autoPostEnabled: boolean;
+  autoPostRepos: string[];
+  autoPostTone: TweetTone;
+  autoPostHour: number;
+}

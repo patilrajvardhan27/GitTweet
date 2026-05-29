@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { AccountCard } from './AccountCard';
 import { ThemeToggle } from './ThemeToggle';
+import { useTheme } from './ThemeProvider';
 import type { GoogleUser, GithubUser, TwitterUser } from '@/types';
 
 interface LayoutProps {
@@ -16,20 +17,17 @@ interface LayoutProps {
 }
 
 function Logo() {
+  const { theme } = useTheme();
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-7 h-7 rounded-md bg-green flex items-center justify-center">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path
-            d="M2 10L6 6L9 9L14 4"
-            stroke="#07070D"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <span className="font-display font-bold text-text-1 text-base tracking-tight">GitTweet</span>
+    <div className="flex items-center gap-2.5">
+      <img
+        src={theme === 'dark' ? '/logo_dark.svg' : '/logo_light.svg'}
+        alt="Twinker logo"
+        width={28}
+        height={28}
+        aria-hidden="true"
+      />
+      <span className="font-display font-bold text-text-1 text-base tracking-tight">Twinker</span>
     </div>
   );
 }

@@ -7,10 +7,12 @@ const twitter = require('./twitter');
 const claude = require('./claude');
 
 async function runAutoPost() {
-  const currentUTCHour = new Date().getUTCHours();
+  const now = new Date();
+  const currentUTCHour = now.getUTCHours();
+  const currentUTCMinute = now.getUTCMinutes();
   let users;
   try {
-    users = await db.getAutoPostUsers(currentUTCHour);
+    users = await db.getAutoPostUsers(currentUTCHour, currentUTCMinute);
   } catch (err) {
     console.error('[scheduler] Failed to fetch auto-post users:', err.message);
     return;
@@ -71,11 +73,11 @@ async function runAutoPost() {
 }
 
 function startScheduler() {
-  // Runs at the top of every hour
-  cron.schedule('0 * * * *', () => {
+  // Runs every 5 minutes to match the 5-minute scheduling granularity in the UI
+  cron.schedule('*/5 * * * *', () => {
     runAutoPost().catch((err) => console.error('[scheduler] Unhandled error:', err.message));
   });
-  console.log('[scheduler] Auto-post scheduler started (runs hourly)');
+  console.log('[scheduler] Auto-post scheduler started (runs every 5 minutes)');
 }
 
 module.exports = { startScheduler, runAutoPost };

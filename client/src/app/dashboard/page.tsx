@@ -70,12 +70,7 @@ export default function DashboardPage() {
   const [postError, setPostError] = useState<string | null>(null);
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
-  const [autoPostPrefs, setAutoPostPrefs] = useState<AutoPostPreferences>({
-    autoPostEnabled: false,
-    autoPostRepos: [],
-    autoPostTone: 'default',
-    autoPostHour: 9,
-  });
+  const [autoPostPrefs, setAutoPostPrefs] = useState<AutoPostPreferences | null>(null);
 
   useEffect(() => {
     if (!authLoading && !google) {
@@ -88,7 +83,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!github) return;
 
-    api.get<{ defaultTone: string; defaultRepo: string | null; autoPostEnabled: boolean; autoPostRepos: string[]; autoPostTone: string; autoPostHour: number }>('/api/preferences')
+    api.get<{ defaultTone: string; defaultRepo: string | null; autoPostEnabled: boolean; autoPostRepos: string[]; autoPostTone: string; autoPostHour: number; autoPostMinute: number }>('/api/preferences')
       .then((prefs) => {
         if (prefs.defaultTone) setTone(prefs.defaultTone as TweetTone);
         if (prefs.defaultRepo) setRepoInput(prefs.defaultRepo);
@@ -97,9 +92,13 @@ export default function DashboardPage() {
           autoPostRepos: prefs.autoPostRepos ?? [],
           autoPostTone: (prefs.autoPostTone as TweetTone) ?? 'default',
           autoPostHour: prefs.autoPostHour ?? 9,
+          autoPostMinute: prefs.autoPostMinute ?? 0,
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        // On fetch failure, show the settings with safe defaults
+        setAutoPostPrefs({ autoPostEnabled: false, autoPostRepos: [], autoPostTone: 'default', autoPostHour: 9, autoPostMinute: 0 });
+      });
 
     api.get<{ tweets: TweetHistoryItem[] }>('/api/history')
       .then(({ tweets }) => setHistory(tweets))
@@ -456,7 +455,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Auto-post Settings */}
-        <AutoPostSettings repos={repos} initial={autoPostPrefs} />
+        {autoPostPrefs && <AutoPostSettings repos={repos} initial={autoPostPrefs} />}
 
       </div>
     </Layout>

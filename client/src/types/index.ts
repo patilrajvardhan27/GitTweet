@@ -70,4 +70,5 @@ export interface AutoPostPreferences {
   autoPostRepos: string[];
   autoPostTone: TweetTone;
   autoPostHour: number;
+  autoPostMinute: number;
 }

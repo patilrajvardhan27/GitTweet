@@ -13,21 +13,20 @@ const TONES: { value: TweetTone; label: string }[] = [
 ];
 
 const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const tzOffset = -new Date().getTimezoneOffset() / 60;
+const tzOffsetMinutes = -new Date().getTimezoneOffset();
 
-function utcToLocal(utcHour: number): number {
-  return ((utcHour + tzOffset) % 24 + 24) % 24;
+function utcToLocalTime(utcHour: number, utcMinute: number) {
+  const total = ((utcHour * 60 + utcMinute + tzOffsetMinutes) % 1440 + 1440) % 1440;
+  return { hour: Math.floor(total / 60), minute: total % 60 };
 }
 
-function localToUtc(localHour: number): number {
-  return ((localHour - tzOffset) % 24 + 24) % 24;
+function localToUtcTime(localHour: number, localMinute: number) {
+  const total = ((localHour * 60 + localMinute - tzOffsetMinutes) % 1440 + 1440) % 1440;
+  return { hour: Math.floor(total / 60), minute: total % 60 };
 }
 
-const LOCAL_HOURS = Array.from({ length: 24 }, (_, i) => {
-  const ampm = i < 12 ? 'AM' : 'PM';
-  const h = i % 12 === 0 ? 12 : i % 12;
-  return { localHour: i, label: `${String(h).padStart(2, '0')}:00 ${ampm}` };
-});
+const MINUTE_OPTIONS = Array.from({ length: 12 }, (_, i) => i * 5);
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 interface Props {
   repos: Repo[];
@@ -35,10 +34,20 @@ interface Props {
 }
 
 export function AutoPostSettings({ repos, initial }: Props) {
+  function initTime(utcHour: number, utcMinute: number) {
+    const { hour, minute } = utcToLocalTime(utcHour, utcMinute);
+    const h = hour % 12 === 0 ? 12 : hour % 12;
+    const m = Math.round(minute / 5) * 5 % 60;
+    const ap: 'AM' | 'PM' = hour < 12 ? 'AM' : 'PM';
+    return { h, m, ap };
+  }
+
   const [enabled, setEnabled] = useState(initial.autoPostEnabled);
   const [selectedRepos, setSelectedRepos] = useState<string[]>(initial.autoPostRepos);
   const [tone, setTone] = useState<TweetTone>(initial.autoPostTone);
-  const [localHour, setLocalHour] = useState(() => utcToLocal(initial.autoPostHour));
+  const [hr, setHr] = useState(() => initTime(initial.autoPostHour, initial.autoPostMinute ?? 0).h);
+  const [mm, setMm] = useState(() => initTime(initial.autoPostHour, initial.autoPostMinute ?? 0).m);
+  const [ampm, setAmpm] = useState<'AM' | 'PM'>(() => initTime(initial.autoPostHour, initial.autoPostMinute ?? 0).ap);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +57,10 @@ export function AutoPostSettings({ repos, initial }: Props) {
     setEnabled(initial.autoPostEnabled);
     setSelectedRepos(initial.autoPostRepos);
     setTone(initial.autoPostTone);
-    setLocalHour(utcToLocal(initial.autoPostHour));
+    const { h, m, ap } = initTime(initial.autoPostHour, initial.autoPostMinute ?? 0);
+    setHr(h); setMm(m); setAmpm(ap);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial.autoPostEnabled, initial.autoPostTone, initial.autoPostHour, initial.autoPostRepos.join(',')]);
+  }, [initial.autoPostEnabled, initial.autoPostTone, initial.autoPostHour, initial.autoPostMinute, initial.autoPostRepos.join(',')]);
 
   function toggleRepo(fullName: string) {
     setSelectedRepos((prev) =>
@@ -58,16 +68,22 @@ export function AutoPostSettings({ repos, initial }: Props) {
     );
   }
 
+  function localHour24() {
+    return ampm === 'AM' ? hr % 12 : (hr % 12) + 12;
+  }
+
   async function handleSave() {
     setSaving(true);
     setSaved(false);
     setError(null);
     try {
+      const { hour: utcHour, minute: utcMinute } = localToUtcTime(localHour24(), mm);
       await api.put('/api/preferences', {
         autoPostEnabled: enabled,
         autoPostRepos: selectedRepos,
         autoPostTone: tone,
-        autoPostHour: localToUtc(localHour),
+        autoPostHour: utcHour,
+        autoPostMinute: utcMinute,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -78,10 +94,11 @@ export function AutoPostSettings({ repos, initial }: Props) {
     }
   }
 
+  const timeLabel = `${String(hr).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
   const summaryLine = enabled
     ? [
         `${selectedRepos.length} repo${selectedRepos.length !== 1 ? 's' : ''}`,
-        LOCAL_HOURS[localHour]?.label,
+        timeLabel,
         TONES.find((t) => t.value === tone)?.label ?? tone,
       ].join(' · ')
     : 'Auto-post commits to Twitter on a daily schedule';
@@ -192,16 +209,41 @@ export function AutoPostSettings({ repos, initial }: Props) {
             <div className="px-5 py-4">
               <p className="text-[10px] text-text-3 uppercase tracking-widest font-semibold mb-0.5">Post time</p>
               <p className="text-[10px] text-text-3 mb-2 truncate">{tzName}</p>
-              <select
-                value={localHour}
-                onChange={(e) => setLocalHour(Number(e.target.value))}
-                className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-1
-                  focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150"
-              >
-                {LOCAL_HOURS.map(({ localHour: h, label }) => (
-                  <option key={h} value={h}>{label}</option>
-                ))}
-              </select>
+              <div className="flex gap-1.5">
+                {/* HR */}
+                <select
+                  value={hr}
+                  onChange={(e) => setHr(Number(e.target.value))}
+                  className="flex-1 min-w-0 bg-bg-base border border-border rounded-lg px-2 py-2 text-xs text-text-1
+                    focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 text-center"
+                >
+                  {HOUR_OPTIONS.map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}</option>
+                  ))}
+                </select>
+                <span className="flex items-center text-text-3 text-xs font-semibold select-none">:</span>
+                {/* MM */}
+                <select
+                  value={mm}
+                  onChange={(e) => setMm(Number(e.target.value))}
+                  className="flex-1 min-w-0 bg-bg-base border border-border rounded-lg px-2 py-2 text-xs text-text-1
+                    focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 text-center"
+                >
+                  {MINUTE_OPTIONS.map((m) => (
+                    <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                  ))}
+                </select>
+                {/* AM/PM */}
+                <select
+                  value={ampm}
+                  onChange={(e) => setAmpm(e.target.value as 'AM' | 'PM')}
+                  className="bg-bg-base border border-border rounded-lg px-2 py-2 text-xs text-text-1
+                    focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150"
+                >
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
             </div>
 
             {/* Tone */}

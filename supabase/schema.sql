@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   updated_at   timestamptz DEFAULT now()
 );
 
+-- Auto-post scheduling columns (added after initial schema)
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_post_enabled  boolean   NOT NULL DEFAULT false;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_post_repos    text[]    NOT NULL DEFAULT '{}';
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_post_tone     text      NOT NULL DEFAULT 'default';
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_post_hour     smallint  NOT NULL DEFAULT 9;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_post_minute   smallint  NOT NULL DEFAULT 0;
+
 -- Legacy table (github_login keyed) — kept so existing data is not lost
 CREATE TABLE IF NOT EXISTS user_preferences_legacy (
   github_login text        PRIMARY KEY,

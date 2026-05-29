@@ -127,7 +127,7 @@ async function getPreferences(userId) {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from('user_preferences')
-    .select('default_tone, default_repo, auto_post_enabled, auto_post_repos, auto_post_tone, auto_post_hour')
+    .select('default_tone, default_repo, auto_post_enabled, auto_post_repos, auto_post_tone, auto_post_hour, auto_post_minute')
     .eq('user_id', userId)
     .single();
   // PGRST116 = no rows; 42703 / PGRST204 = schema cache not yet refreshed after migration
@@ -136,7 +136,7 @@ async function getPreferences(userId) {
   return data ?? null;
 }
 
-async function upsertPreferences(userId, { defaultTone, defaultRepo, autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour } = {}) {
+async function upsertPreferences(userId, { defaultTone, defaultRepo, autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour, autoPostMinute } = {}) {
   if (!supabase || !userId) return;
   const row = { user_id: userId, updated_at: new Date().toISOString() };
   if (defaultTone !== undefined) row.default_tone = defaultTone;
@@ -145,6 +145,7 @@ async function upsertPreferences(userId, { defaultTone, defaultRepo, autoPostEna
   if (autoPostRepos !== undefined) row.auto_post_repos = autoPostRepos;
   if (autoPostTone !== undefined) row.auto_post_tone = autoPostTone;
   if (autoPostHour !== undefined) row.auto_post_hour = autoPostHour;
+  if (autoPostMinute !== undefined) row.auto_post_minute = autoPostMinute;
 
   const { error } = await supabase
     .from('user_preferences')
@@ -156,14 +157,15 @@ async function upsertPreferences(userId, { defaultTone, defaultRepo, autoPostEna
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────
 
-async function getAutoPostUsers(currentUTCHour) {
+async function getAutoPostUsers(currentUTCHour, currentUTCMinute) {
   if (!supabase) return [];
 
   const { data: prefs, error: prefErr } = await supabase
     .from('user_preferences')
     .select('user_id, auto_post_repos, auto_post_tone')
     .eq('auto_post_enabled', true)
-    .eq('auto_post_hour', currentUTCHour);
+    .eq('auto_post_hour', currentUTCHour)
+    .eq('auto_post_minute', currentUTCMinute);
 
   if (prefErr) throw prefErr;
   if (!prefs?.length) return [];

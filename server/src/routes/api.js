@@ -166,6 +166,7 @@ router.get('/preferences', requireAuth, async (req, res, next) => {
         autoPostRepos: [],
         autoPostTone: 'default',
         autoPostHour: 9,
+        autoPostMinute: 0,
       });
     }
     const prefs = await db.getPreferences(userId);
@@ -176,6 +177,7 @@ router.get('/preferences', requireAuth, async (req, res, next) => {
       autoPostRepos: prefs?.auto_post_repos ?? [],
       autoPostTone: prefs?.auto_post_tone ?? 'default',
       autoPostHour: prefs?.auto_post_hour ?? 9,
+      autoPostMinute: prefs?.auto_post_minute ?? 0,
     });
   } catch (err) {
     next(err);
@@ -187,7 +189,7 @@ router.put('/preferences', requireAuth, async (req, res, next) => {
     const userId = req.session.userId;
     if (!userId) return res.status(401).json({ error: 'Not authenticated' });
 
-    const { autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour } = req.body;
+    const { autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour, autoPostMinute } = req.body;
 
     const validTones = ['default', 'casual', 'technical', 'motivational'];
 
@@ -197,6 +199,9 @@ router.put('/preferences', requireAuth, async (req, res, next) => {
     if (validTones.includes(autoPostTone)) patch.autoPostTone = autoPostTone;
     if (typeof autoPostHour === 'number' && autoPostHour >= 0 && autoPostHour <= 23) {
       patch.autoPostHour = Math.floor(autoPostHour);
+    }
+    if (typeof autoPostMinute === 'number' && autoPostMinute >= 0 && autoPostMinute <= 59) {
+      patch.autoPostMinute = Math.floor(autoPostMinute);
     }
 
     await db.upsertPreferences(userId, patch);

@@ -38,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${syne.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}
       data-theme="dark"
+      suppressHydrationWarning
     >
       {/* Inline script runs before paint to avoid flash of wrong theme */}
       <head>

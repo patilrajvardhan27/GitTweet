@@ -189,11 +189,13 @@ router.put('/preferences', requireAuth, async (req, res, next) => {
     const userId = req.session.userId;
     if (!userId) return res.status(401).json({ error: 'Not authenticated' });
 
-    const { autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour, autoPostMinute } = req.body;
+    const { defaultTone, defaultRepo, autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour, autoPostMinute } = req.body;
 
     const validTones = ['default', 'casual', 'technical', 'motivational'];
 
     const patch = {};
+    if (validTones.includes(defaultTone)) patch.defaultTone = defaultTone;
+    if (defaultRepo !== undefined) patch.defaultRepo = typeof defaultRepo === 'string' ? defaultRepo.trim() || null : null;
     if (typeof autoPostEnabled === 'boolean') patch.autoPostEnabled = autoPostEnabled;
     if (Array.isArray(autoPostRepos)) patch.autoPostRepos = autoPostRepos.filter((r) => typeof r === 'string');
     if (validTones.includes(autoPostTone)) patch.autoPostTone = autoPostTone;

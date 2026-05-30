@@ -125,15 +125,31 @@ async function hasTweetedTodayForRepo(userId, repo) {
 
 async function getPreferences(userId) {
   if (!supabase) return null;
+
   const { data, error } = await supabase
     .from('user_preferences')
     .select('default_tone, default_repo, auto_post_enabled, auto_post_repos, auto_post_tone, auto_post_hour, auto_post_minute')
     .eq('user_id', userId)
     .single();
-  // PGRST116 = no rows; 42703 / PGRST204 = schema cache not yet refreshed after migration
-  if (error && error.code !== 'PGRST116' && error.code !== '42703' && error.code !== 'PGRST204') throw error;
-  if (error) return null;
-  return data ?? null;
+
+  if (!error) return data ?? null;
+
+  // PGRST116 = no rows
+  if (error.code === 'PGRST116') return null;
+
+  // auto_post_minute column missing — retry without it
+  if (error.code === '42703' || error.code === 'PGRST204') {
+    console.warn('[db] getPreferences schema error — retrying without auto_post_minute:', error.message);
+    const { data: coreData, error: retryError } = await supabase
+      .from('user_preferences')
+      .select('default_tone, default_repo, auto_post_enabled, auto_post_repos, auto_post_tone, auto_post_hour')
+      .eq('user_id', userId)
+      .single();
+    if (retryError && retryError.code !== 'PGRST116') throw retryError;
+    return coreData ?? null;
+  }
+
+  throw error;
 }
 
 async function upsertPreferences(userId, { defaultTone, defaultRepo, autoPostEnabled, autoPostRepos, autoPostTone, autoPostHour, autoPostMinute } = {}) {
@@ -150,9 +166,24 @@ async function upsertPreferences(userId, { defaultTone, defaultRepo, autoPostEna
   const { error } = await supabase
     .from('user_preferences')
     .upsert(row, { onConflict: 'user_id' });
-  // Ignore schema-cache errors — table needs migration
-  if (error && error.code !== '42703' && error.code !== 'PGRST204') throw error;
-  if (error) console.warn('[db] upsertPreferences schema error — run DB migration:', error.message);
+
+  if (!error) return;
+
+  // Schema-cache or missing-column error: retry without auto_post_minute so the
+  // rest of the row (including auto_post_enabled) still gets saved.
+  if (error.code === '42703' || error.code === 'PGRST204') {
+    console.warn('[db] upsertPreferences schema error — retrying without auto_post_minute:', error.message);
+    // eslint-disable-next-line no-unused-vars
+    const { auto_post_minute: _dropped, ...coreRow } = row;
+    const { error: retryError } = await supabase
+      .from('user_preferences')
+      .upsert(coreRow, { onConflict: 'user_id' });
+    if (retryError && retryError.code !== '42703' && retryError.code !== 'PGRST204') throw retryError;
+    if (retryError) console.warn('[db] upsertPreferences core retry also failed:', retryError.message);
+    return;
+  }
+
+  throw error;
 }
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────

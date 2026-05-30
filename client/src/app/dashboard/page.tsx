@@ -9,10 +9,11 @@ import { CommitList } from '@/components/CommitList';
 import { TweetPreview } from '@/components/TweetPreview';
 import { TweetHistory } from '@/components/TweetHistory';
 import { AutoPostSettings } from '@/components/AutoPostSettings';
+import { GeneralPreferencesCard } from '@/components/GeneralPreferences';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
-import type { Commit, TweetTone, TweetHistoryItem, AutoPostPreferences } from '@/types';
+import type { Commit, TweetTone, TweetHistoryItem, AutoPostPreferences, GeneralPreferences } from '@/types';
 
 const TONES: { value: TweetTone; label: string }[] = [
   { value: 'default', label: 'Default' },
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const [postError, setPostError] = useState<string | null>(null);
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
+  const [generalPrefs, setGeneralPrefs] = useState<GeneralPreferences | null>(null);
   const [autoPostPrefs, setAutoPostPrefs] = useState<AutoPostPreferences | null>(null);
 
   useEffect(() => {
@@ -85,8 +87,10 @@ export default function DashboardPage() {
 
     api.get<{ defaultTone: string; defaultRepo: string | null; autoPostEnabled: boolean; autoPostRepos: string[]; autoPostTone: string; autoPostHour: number; autoPostMinute: number }>('/api/preferences')
       .then((prefs) => {
-        if (prefs.defaultTone) setTone(prefs.defaultTone as TweetTone);
+        const resolvedTone = (prefs.defaultTone as TweetTone) ?? 'default';
+        if (resolvedTone) setTone(resolvedTone);
         if (prefs.defaultRepo) setRepoInput(prefs.defaultRepo);
+        setGeneralPrefs({ defaultTone: resolvedTone, defaultRepo: prefs.defaultRepo ?? null });
         setAutoPostPrefs({
           autoPostEnabled: prefs.autoPostEnabled ?? false,
           autoPostRepos: prefs.autoPostRepos ?? [],
@@ -96,7 +100,7 @@ export default function DashboardPage() {
         });
       })
       .catch(() => {
-        // On fetch failure, show the settings with safe defaults
+        setGeneralPrefs({ defaultTone: 'default', defaultRepo: null });
         setAutoPostPrefs({ autoPostEnabled: false, autoPostRepos: [], autoPostTone: 'default', autoPostHour: 9, autoPostMinute: 0 });
       });
 
@@ -445,16 +449,26 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Automation divider */}
+        {/* Settings section */}
         <div className="flex items-center gap-3 pt-4">
           <div className="h-px flex-1 bg-border" />
           <span className="text-[10px] font-semibold text-text-3 uppercase tracking-widest">
-            Automation
+            Settings
           </span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        {/* Auto-post Settings */}
+        {generalPrefs && (
+          <GeneralPreferencesCard
+            initial={generalPrefs}
+            onSaved={(p) => {
+              setGeneralPrefs(p);
+              setTone(p.defaultTone);
+              if (p.defaultRepo) setRepoInput(p.defaultRepo);
+            }}
+          />
+        )}
+
         {autoPostPrefs && <AutoPostSettings repos={repos} initial={autoPostPrefs} />}
 
       </div>

@@ -65,6 +65,11 @@ export interface TweetHistoryItem {
   tone: TweetTone;
 }
 
+export interface GeneralPreferences {
+  defaultTone: TweetTone;
+  defaultRepo: string | null;
+}
+
 export interface AutoPostPreferences {
   autoPostEnabled: boolean;
   autoPostRepos: string[];

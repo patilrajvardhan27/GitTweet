@@ -3,8 +3,9 @@
 import Image from 'next/image';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { Spinner } from './ui/Spinner';
 import { useState } from 'react';
-import type { TwitterUser } from '@/types';
+import type { TwitterUser, Commit } from '@/types';
 
 interface TweetPreviewProps {
   tweet: string;
@@ -15,6 +16,13 @@ interface TweetPreviewProps {
   posting: boolean;
   posted: boolean;
   postedUrl: string | null;
+  includeCard: boolean;
+  onToggleCard: () => void;
+  commits: Commit[];
+  repoName: string;
+  cardGenerating: boolean;
+  cardPreviewUrl: string | null;
+  postedCardUrl: string | null;
 }
 
 const MAX = 280;
@@ -58,6 +66,13 @@ export function TweetPreview({
   posting,
   posted,
   postedUrl,
+  includeCard,
+  onToggleCard,
+  commits,
+  repoName,
+  cardGenerating,
+  cardPreviewUrl,
+  postedCardUrl,
 }: TweetPreviewProps) {
   const [copied, setCopied] = useState(false);
   const count = tweet.length;
@@ -73,25 +88,49 @@ export function TweetPreview({
 
   if (posted && postedUrl) {
     return (
-      <div className="rounded-lg border border-green-border bg-green-bg px-5 py-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <svg width="18" height="18" viewBox="0 0 20 20" fill="var(--color-green)" aria-hidden="true">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <span className="text-green text-sm font-medium">Tweet posted!</span>
+      <div className="rounded-lg border border-green-border bg-green-bg overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="var(--color-green)" aria-hidden="true">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="text-green text-sm font-medium">Tweet posted!</span>
+          </div>
+          <a
+            href={postedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-green underline underline-offset-2 hover:opacity-80 transition-opacity"
+          >
+            View on X →
+          </a>
         </div>
-        <a
-          href={postedUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-green underline underline-offset-2 hover:opacity-80 transition-opacity"
-        >
-          View on X →
-        </a>
+
+        {/* Card section in success state */}
+        {includeCard && (
+          <div className="border-t border-green/20 px-5 py-4">
+            {cardGenerating && (
+              <div className="flex items-center gap-2 text-green/70 text-xs">
+                <Spinner size={13} className="text-green/70" />
+                Generating commit card…
+              </div>
+            )}
+            {!cardGenerating && postedCardUrl && (
+              <div className="space-y-2">
+                <img
+                  src={postedCardUrl}
+                  alt="Commit card"
+                  className="w-full rounded-lg border border-green/20"
+                />
+                <p className="text-xs text-green/70">Card attached to your tweet</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -135,6 +174,44 @@ export function TweetPreview({
           aria-label="Tweet text"
         />
       </div>
+
+      {/* Card toggle */}
+      <div className="px-4 py-2.5 border-t border-border flex items-center gap-2.5">
+        <button
+          role="switch"
+          aria-checked={includeCard}
+          onClick={onToggleCard}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+            includeCard ? 'bg-green' : 'bg-bg-elevated'
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+              includeCard ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+        <span className="text-xs text-text-2">Generate commit card</span>
+      </div>
+
+      {/* Card preview — real server-rendered PNG */}
+      {includeCard && (
+        <div className="mx-4 mb-3">
+          {cardGenerating && (
+            <div className="rounded-lg border border-border bg-bg-elevated h-32 flex items-center justify-center gap-2.5 text-text-3 text-xs">
+              <Spinner size={14} />
+              Generating card with AI hook…
+            </div>
+          )}
+          {!cardGenerating && cardPreviewUrl && (
+            <img
+              src={cardPreviewUrl}
+              alt="Commit card preview"
+              className="w-full rounded-lg border border-border"
+            />
+          )}
+        </div>
+      )}
 
       {/* Footer: char count + actions */}
       <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-3">

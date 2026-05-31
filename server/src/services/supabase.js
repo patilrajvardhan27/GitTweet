@@ -223,7 +223,7 @@ async function getAutoPostUsers(currentUTCHour, currentUTCMinute) {
 
   const ghMap = Object.fromEntries((ghAccounts ?? []).map((a) => [a.user_id, a.access_token]));
   const twMap = Object.fromEntries(
-    (twAccounts ?? []).map((a) => [a.user_id, { access: a.access_token, refresh: a.refresh_token }]),
+    (twAccounts ?? []).map((a) => [a.user_id, { access: a.access_token, secret: a.refresh_token }]),
   );
 
   return prefs
@@ -234,7 +234,7 @@ async function getAutoPostUsers(currentUTCHour, currentUTCMinute) {
       tone: p.auto_post_tone ?? 'default',
       githubToken: ghMap[p.user_id],
       twitterAccessToken: twMap[p.user_id].access,
-      twitterRefreshToken: twMap[p.user_id].refresh,
+      twitterAccessTokenSecret: twMap[p.user_id].secret,
     }));
 }
 

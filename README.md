@@ -110,14 +110,6 @@ Also update the GitHub OAuth App's homepage URL to your Vercel URL.
 
 ## Scope of improvements
 
-### Quick wins
-
-- **Tweet history** — nothing is saved after posting; add localStorage or a simple file-based store
-- **OAuth error messages** — failures silently redirect with `?error=` in the URL but show nothing to the user
-- **Refresh button** — no way to re-fetch commits after the initial load without a page refresh
-- **Date range picker** — date window is hardcoded; let users pick a custom range
-- **Tweet tone/style selector** — same Claude prompt for everyone; add options like "casual", "technical", "motivational"
-
 ### UX & product
 
 - **Repos loading state** — `reposLoading` state exists but is never shown in the UI

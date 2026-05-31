@@ -6,6 +6,12 @@ const github = require('../services/github');
 const twitter = require('../services/twitter');
 const claude = require('../services/claude');
 const db = require('../services/supabase');
+const cardGenerator = require('../services/cardGenerator');
+
+async function buildCard(repoName, commits) {
+  const hookLine = await claude.generateCardHook(commits, repoName);
+  return cardGenerator.generateCard({ repoName, commits, hookLine });
+}
 
 const router = express.Router();
 
@@ -81,11 +87,32 @@ router.post('/generate-tweet', async (req, res, next) => {
   }
 });
 
+// ─── Generate Commit Card ─────────────────────────────────────────────────────
+
+router.post('/generate-card', requireGitHub, async (req, res, next) => {
+  try {
+    const { repoName, commits } = req.body;
+
+    if (!repoName || typeof repoName !== 'string') {
+      return res.status(400).json({ error: 'repoName is required' });
+    }
+
+    if (!Array.isArray(commits) || commits.length === 0) {
+      return res.status(400).json({ error: 'commits must be a non-empty array' });
+    }
+
+    const buffer = await buildCard(repoName, commits);
+    res.json({ dataUrl: `data:image/png;base64,${buffer.toString('base64')}` });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Post Tweet ───────────────────────────────────────────────────────────────
 
 router.post('/post-tweet', requireTwitter, async (req, res, next) => {
   try {
-    const { text, repo, tone } = req.body;
+    const { text, repo, tone, includeCard, commits } = req.body;
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'text is required' });
@@ -95,12 +122,20 @@ router.post('/post-tweet', requireTwitter, async (req, res, next) => {
       return res.status(400).json({ error: 'Tweet exceeds 280 characters' });
     }
 
-    const { accessToken, refreshToken } = req.session.twitter;
+    const { accessToken, accessTokenSecret } = req.session.twitter;
 
-    const result = await twitter.postTweet(accessToken, refreshToken, text, (tokens) => {
-      req.session.twitter.accessToken = tokens.access_token;
-      req.session.twitter.refreshToken = tokens.refresh_token;
-    });
+    let mediaId = null;
+    if (includeCard && Array.isArray(commits) && commits.length > 0) {
+      try {
+        const repoName = (typeof repo === 'string' && repo) ? repo : 'repo';
+        const imageBuffer = await buildCard(repoName, commits);
+        mediaId = await twitter.uploadMedia(accessToken, accessTokenSecret, imageBuffer);
+      } catch (err) {
+        console.error('[card] media upload failed, posting without image:', err.message);
+      }
+    }
+
+    const result = await twitter.postTweet(accessToken, accessTokenSecret, text, mediaId);
 
     const tweetUrl = `https://twitter.com/i/web/status/${result.id}`;
     res.json({ success: true, tweet_id: result.id, tweet_url: tweetUrl });

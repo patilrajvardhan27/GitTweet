@@ -61,4 +61,43 @@ async function generateTweet(commits, repoName, repoDescription, context, tone =
   return text.text.trim();
 }
 
-module.exports = { generateTweet };
+/**
+ * Generates a short, punchy hook line for the commit card image.
+ * The hook teases what shipped without giving details — makes people read the tweet.
+ *
+ * @param {{ message: string }[]} commits
+ * @param {string} repoName
+ * @returns {Promise<string>}
+ */
+async function generateCardHook(commits, repoName) {
+  const commitLines = commits.map((c) => `- ${c.message.split('\n')[0]}`).join('\n');
+
+  const prompt = [
+    'You are writing a one-line teaser for a developer\'s commit card image that gets posted to X (Twitter).',
+    'The hook should make someone stop scrolling and want to read the tweet caption for details.',
+    '',
+    `Project: ${repoName}`,
+    'Commits:',
+    commitLines,
+    '',
+    'Rules:',
+    '- Output exactly ONE line, no punctuation at the end',
+    '- Maximum 60 characters',
+    '- Be intriguing, punchy, or bold — NOT a summary of what was done',
+    '- Do not list features. Do not say "I added X". Tease the reader.',
+    '- Examples of good hooks: "something big just landed", "the bug that shouldn\'t exist", "faster than yesterday", "this one took a while"',
+    '- Output only the hook text, nothing else',
+  ].join('\n');
+
+  const message = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 60,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = message.content[0];
+  if (text.type !== 'text') throw new Error('Unexpected response type from Claude');
+  return text.text.trim().replace(/^["']|["']$/g, '');
+}
+
+module.exports = { generateTweet, generateCardHook };

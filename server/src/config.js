@@ -37,10 +37,9 @@ const config = {
     callbackUrl: `${process.env.SERVER_URL ?? 'http://localhost:3001'}/auth/github/callback`,
   },
   twitter: {
-    clientId: process.env.TWITTER_CLIENT_ID ?? '',
-    clientSecret: process.env.TWITTER_CLIENT_SECRET ?? '',
+    apiKey: process.env.TWITTER_API_KEY ?? '',
+    apiSecret: process.env.TWITTER_API_SECRET ?? '',
     callbackUrl: `${process.env.SERVER_URL ?? 'http://localhost:3001'}/auth/twitter/callback`,
-    scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',

@@ -47,11 +47,8 @@ async function runAutoPost() {
 
         const result = await twitter.postTweet(
           user.twitterAccessToken,
-          user.twitterRefreshToken,
+          user.twitterAccessTokenSecret,
           tweetText,
-          async (tokens) => {
-            await db.updateToken(user.userId, 'twitter', tokens.access_token, tokens.refresh_token);
-          },
         );
 
         const tweetUrl = `https://twitter.com/i/web/status/${result.id}`;

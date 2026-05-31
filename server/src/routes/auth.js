@@ -136,84 +136,95 @@ router.get('/github/callback', async (req, res) => {
   }
 });
 
-// ─── Twitter OAuth 2.0 PKCE ───────────────────────────────────────────────────
+// ─── Twitter OAuth 1.0a ───────────────────────────────────────────────────────
 
-router.get('/twitter', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  const codeVerifier = crypto.randomBytes(32).toString('base64url');
-  const codeChallenge = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+const REQUEST_TOKEN_URL = 'https://api.twitter.com/oauth/request_token';
+const AUTHORIZE_URL     = 'https://api.twitter.com/oauth/authorize';
+const ACCESS_TOKEN_URL  = 'https://api.twitter.com/oauth/access_token';
 
-  req.session.twitterState = state;
-  req.session.twitterCodeVerifier = codeVerifier;
+router.get('/twitter', async (req, res) => {
+  if (!config.twitter.apiKey || !config.twitter.apiSecret) {
+    console.error('[twitter auth] TWITTER_API_KEY or TWITTER_API_SECRET is not set in .env');
+    return res.redirect(`${config.clientUrl}?error=twitter_not_configured`);
+  }
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: config.twitter.clientId,
-    redirect_uri: config.twitter.callbackUrl,
-    scope: config.twitter.scopes.join(' '),
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  });
+  try {
+    const auth = twitter.oauthSign({
+      method: 'POST',
+      url: REQUEST_TOKEN_URL,
+      oauthExtra: { oauth_callback: config.twitter.callbackUrl },
+    });
 
-  res.redirect(`https://x.com/i/oauth2/authorize?${params}`);
+    const { data } = await axios.post(REQUEST_TOKEN_URL, null, {
+      headers: {
+        Authorization: auth,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
+
+    const p = new URLSearchParams(data);
+    const requestToken = p.get('oauth_token');
+    const requestTokenSecret = p.get('oauth_token_secret');
+    if (!requestToken) throw new Error('No request token received');
+
+    req.session.twitterRequestToken = requestToken;
+    req.session.twitterRequestTokenSecret = requestTokenSecret;
+
+    res.redirect(`${AUTHORIZE_URL}?oauth_token=${requestToken}`);
+  } catch (err) {
+    console.error('[twitter auth]', err.response?.data ?? err.message);
+    res.redirect(`${config.clientUrl}?error=twitter_auth_failed`);
+  }
 });
 
 router.get('/twitter/callback', async (req, res) => {
-  const { code, state, error } = req.query;
+  const { oauth_token, oauth_verifier, denied } = req.query;
 
-  if (error || state !== req.session.twitterState) {
+  if (denied) return res.redirect(`${config.clientUrl}?error=twitter_auth_denied`);
+
+  if (!oauth_token || !oauth_verifier || oauth_token !== req.session.twitterRequestToken) {
     return res.redirect(`${config.clientUrl}?error=twitter_auth_failed`);
   }
 
-  const codeVerifier = req.session.twitterCodeVerifier;
-  delete req.session.twitterState;
-  delete req.session.twitterCodeVerifier;
+  const requestTokenSecret = req.session.twitterRequestTokenSecret;
+  delete req.session.twitterRequestToken;
+  delete req.session.twitterRequestTokenSecret;
 
   try {
-    const credentials = Buffer.from(
-      `${config.twitter.clientId}:${config.twitter.clientSecret}`,
-    ).toString('base64');
-
-    const params = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: config.twitter.callbackUrl,
-      code_verifier: codeVerifier,
+    const auth = twitter.oauthSign({
+      method: 'POST',
+      url: ACCESS_TOKEN_URL,
+      oauthExtra: { oauth_verifier: String(oauth_verifier) },
+      accessToken: String(oauth_token),
+      accessTokenSecret: requestTokenSecret,
     });
 
-    const tokenRes = await axios.post(
-      'https://api.twitter.com/2/oauth2/token',
-      params.toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${credentials}`,
-        },
-      },
-    );
+    const { data } = await axios.post(ACCESS_TOKEN_URL, null, {
+      headers: { Authorization: auth },
+    });
 
-    const { access_token, refresh_token } = tokenRes.data;
-    const user = await twitter.getUser(access_token);
+    const p = new URLSearchParams(data);
+    const accessToken = p.get('oauth_token');
+    const accessTokenSecret = p.get('oauth_token_secret');
+    if (!accessToken) throw new Error('No access token received');
 
-    req.session.twitter = { accessToken: access_token, refreshToken: refresh_token, user };
+    const user = await twitter.getUser(accessToken, accessTokenSecret);
+    req.session.twitter = { accessToken, accessTokenSecret, user };
 
     if (req.session.userId) {
       db.linkAccount(req.session.userId, 'twitter', {
         providerId: user.id,
-        username: user.username,
-        name: user.name,
-        avatarUrl: user.profile_image_url ?? null,
-        accessToken: access_token,
-        refreshToken: refresh_token,
+        username:   user.username,
+        name:       user.name,
+        avatarUrl:  user.profile_image_url ?? null,
+        accessToken,
+        refreshToken: accessTokenSecret, // reuse refresh_token column for the secret
       }).catch((e) => console.error('[db] linkAccount twitter failed:', e.message));
     }
 
     res.redirect(`${config.clientUrl}/connect`);
-  } catch {
+  } catch (err) {
+    console.error('[twitter callback]', err.response?.data ?? err.message);
     res.redirect(`${config.clientUrl}?error=twitter_auth_failed`);
   }
 });

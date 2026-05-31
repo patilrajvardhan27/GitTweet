@@ -69,6 +69,10 @@ export default function DashboardPage() {
   const [posted, setPosted] = useState(false);
   const [postedUrl, setPostedUrl] = useState<string | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
+  const [cardGenerating, setCardGenerating] = useState(false);
+  const [includeCard, setIncludeCard] = useState(false);
+  const [cardPreviewUrl, setCardPreviewUrl] = useState<string | null>(null);
+  const [postedCardUrl, setPostedCardUrl] = useState<string | null>(null);
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
   const [generalPrefs, setGeneralPrefs] = useState<GeneralPreferences | null>(null);
@@ -166,11 +170,18 @@ export default function DashboardPage() {
     if (!tweet.trim()) return;
     setPosting(true);
     setPostError(null);
+    setPostedCardUrl(null);
 
     try {
       const res = await api.post<{ success: boolean; tweet_id: string; tweet_url: string }>(
         '/api/post-tweet',
-        { text: tweet, repo: repoInput, tone },
+        {
+          text: tweet,
+          repo: repoInput,
+          tone,
+          includeCard: includeCard && selectedCommits.length > 0,
+          commits: includeCard ? selectedCommits : undefined,
+        },
       );
       setPosted(true);
       setPostedUrl(res.tweet_url);
@@ -184,6 +195,22 @@ export default function DashboardPage() {
         tone,
       };
       setHistory((prev) => [item, ...prev].slice(0, 20));
+
+      // Generate card preview for the success state (non-blocking)
+      if (includeCard && selectedCommits.length > 0) {
+        setCardGenerating(true);
+        try {
+          const cardRes = await api.post<{ dataUrl: string }>('/api/generate-card', {
+            repoName: repoInput,
+            commits: selectedCommits,
+          });
+          setPostedCardUrl(cardRes.dataUrl);
+        } catch {
+          // non-fatal
+        } finally {
+          setCardGenerating(false);
+        }
+      }
     } catch (err) {
       setPostError(err instanceof Error ? err.message : 'Failed to post tweet');
     } finally {
@@ -430,6 +457,28 @@ export default function DashboardPage() {
                   posting={posting}
                   posted={posted}
                   postedUrl={postedUrl}
+                  includeCard={includeCard}
+                  onToggleCard={async () => {
+                    const next = !includeCard;
+                    setIncludeCard(next);
+                    setCardPreviewUrl(null);
+                    if (next && selectedCommits.length > 0) {
+                      setCardGenerating(true);
+                      try {
+                        const r = await api.post<{ dataUrl: string }>('/api/generate-card', {
+                          repoName: repoInput,
+                          commits: selectedCommits,
+                        });
+                        setCardPreviewUrl(r.dataUrl);
+                      } catch { /* non-fatal */ }
+                      finally { setCardGenerating(false); }
+                    }
+                  }}
+                  commits={selectedCommits}
+                  repoName={repoInput}
+                  cardGenerating={cardGenerating}
+                  cardPreviewUrl={cardPreviewUrl}
+                  postedCardUrl={postedCardUrl}
                 />
               )}
 

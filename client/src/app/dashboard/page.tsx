@@ -9,12 +9,11 @@ import { CommitList } from '@/components/CommitList';
 import { TweetPreview } from '@/components/TweetPreview';
 import { ThreadPreview } from '@/components/ThreadPreview';
 import { TweetHistory } from '@/components/TweetHistory';
-import { AutoPostSettings } from '@/components/AutoPostSettings';
-import { GeneralPreferencesCard } from '@/components/GeneralPreferences';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
-import type { Commit, TweetTone, TweetHistoryItem, AutoPostPreferences, GeneralPreferences } from '@/types';
+import Link from 'next/link';
+import type { Commit, TweetTone, TweetHistoryItem } from '@/types';
 
 const TONES: { value: TweetTone; label: string }[] = [
   { value: 'default', label: 'Default' },
@@ -30,15 +29,15 @@ function toDateInput(date: Date): string {
 function StepBadge({ n, done }: { n: number; done?: boolean }) {
   if (done) {
     return (
-      <span className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-green/10 border border-green/25 shrink-0">
-        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-          <path d="M2 5l2.5 2.5L8 3" stroke="var(--color-green)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green/15 border border-green/30 shrink-0">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+          <path d="M2 5l2.5 2.5L8 3" stroke="var(--color-green)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-full border border-border text-[10px] font-mono font-semibold text-text-3 shrink-0">
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-bg-elevated border border-border-hover text-[10px] font-mono font-bold text-text-2 shrink-0 tracking-tight">
       {String(n).padStart(2, '0')}
     </span>
   );
@@ -78,8 +77,6 @@ export default function DashboardPage() {
   const [postedCardUrl, setPostedCardUrl] = useState<string | null>(null);
 
   const [history, setHistory] = useState<TweetHistoryItem[]>([]);
-  const [generalPrefs, setGeneralPrefs] = useState<GeneralPreferences | null>(null);
-  const [autoPostPrefs, setAutoPostPrefs] = useState<AutoPostPreferences | null>(null);
 
   useEffect(() => {
     if (!authLoading && !google) {
@@ -92,24 +89,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!github) return;
 
-    api.get<{ defaultTone: string; defaultRepo: string | null; autoPostEnabled: boolean; autoPostRepos: string[]; autoPostTone: string; autoPostHour: number; autoPostMinute: number }>('/api/preferences')
+    api.get<{ defaultTone: string; defaultRepo: string | null }>('/api/preferences')
       .then((prefs) => {
         const resolvedTone = (prefs.defaultTone as TweetTone) ?? 'default';
         if (resolvedTone) setTone(resolvedTone);
         if (prefs.defaultRepo) setRepoInput(prefs.defaultRepo);
-        setGeneralPrefs({ defaultTone: resolvedTone, defaultRepo: prefs.defaultRepo ?? null });
-        setAutoPostPrefs({
-          autoPostEnabled: prefs.autoPostEnabled ?? false,
-          autoPostRepos: prefs.autoPostRepos ?? [],
-          autoPostTone: (prefs.autoPostTone as TweetTone) ?? 'default',
-          autoPostHour: prefs.autoPostHour ?? 9,
-          autoPostMinute: prefs.autoPostMinute ?? 0,
-        });
       })
-      .catch(() => {
-        setGeneralPrefs({ defaultTone: 'default', defaultRepo: null });
-        setAutoPostPrefs({ autoPostEnabled: false, autoPostRepos: [], autoPostTone: 'default', autoPostHour: 9, autoPostMinute: 0 });
-      });
+      .catch(() => {});
 
     api.get<{ tweets: TweetHistoryItem[] }>('/api/history')
       .then(({ tweets }) => setHistory(tweets))
@@ -317,10 +303,13 @@ export default function DashboardPage() {
   }
 
   const inputBase =
-    'w-full bg-bg-base border border-border rounded-lg px-3.5 py-2.5 text-sm text-text-1 placeholder:text-text-3 focus:outline-none focus:ring-1 focus:ring-border-hover focus:border-border-hover transition-all duration-150';
+    'w-full bg-bg-base border border-border rounded-xl px-3.5 py-2.5 text-sm text-text-1 placeholder:text-text-3 focus:outline-none focus:ring-1 focus:ring-border-hover focus:border-border-hover transition-all duration-150';
+
+  const card =
+    'rounded-xl border border-border bg-bg-surface overflow-hidden card-elevated transition-all duration-200';
 
   const cardHeader =
-    'px-5 py-3.5 border-b border-border flex items-center gap-2.5';
+    'px-5 py-4 border-b border-border flex items-center gap-3';
 
   return (
     <Layout
@@ -333,20 +322,20 @@ export default function DashboardPage() {
       }}
       onLogout={handleLogout}
     >
-      <div className="max-w-[660px] mx-auto px-6 py-10 space-y-3">
+      <div className="max-w-[640px] mx-auto px-6 py-10 space-y-3">
 
         {/* Step 1 — Repository */}
-        <section aria-labelledby="step-repo" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+        <section aria-labelledby="step-repo" className={card}>
           <div className={cardHeader}>
             <StepBadge n={1} done={hasFetched} />
-            <h2 id="step-repo" className="text-sm font-semibold text-text-1">
+            <h2 id="step-repo" className="text-sm font-semibold text-text-1 font-display">
               Pick a repository
             </h2>
           </div>
 
           <div className="px-5 py-4 space-y-3">
-            <div className="flex gap-2.5">
-              <div className="flex-1">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
                 <input
                   list="repos-datalist"
                   value={repoInput}
@@ -363,30 +352,30 @@ export default function DashboardPage() {
                 </datalist>
               </div>
               <Button
-                variant="ghost"
+                variant={hasFetched ? 'ghost' : 'primary'}
                 size="md"
                 loading={commitsLoading}
                 disabled={!repoInput.trim() || commitsLoading}
                 onClick={handleFetchCommits}
                 className="shrink-0"
               >
-                {commitsLoading ? 'Fetching…' : 'Fetch commits'}
+                {commitsLoading ? 'Fetching…' : hasFetched ? 'Refresh' : 'Fetch commits'}
               </Button>
             </div>
 
             {/* Date range */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 flex-1">
-                <span className="text-xs text-text-3 shrink-0">From</span>
+                <span className="text-xs text-text-3 shrink-0 font-medium">From</span>
                 <input
                   type="date"
                   value={dateFrom}
                   max={dateTo}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="flex-1 bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-1 focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 [color-scheme:dark]"
+                  className="flex-1 bg-bg-base border border-border rounded-xl px-3 py-2 text-xs text-text-1 focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 [color-scheme:dark]"
                 />
               </div>
-              <span className="text-text-3 text-xs shrink-0 select-none">→</span>
+              <span className="text-text-3 text-xs shrink-0 select-none">–</span>
               <div className="flex items-center gap-2 flex-1">
                 <input
                   type="date"
@@ -394,35 +383,30 @@ export default function DashboardPage() {
                   min={dateFrom}
                   max={toDateInput(new Date())}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="flex-1 bg-bg-base border border-border rounded-lg px-3 py-2 text-xs text-text-1 focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 [color-scheme:dark]"
+                  className="flex-1 bg-bg-base border border-border rounded-xl px-3 py-2 text-xs text-text-1 focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150 [color-scheme:dark]"
                 />
-                <span className="text-xs text-text-3 shrink-0">To</span>
+                <span className="text-xs text-text-3 shrink-0 font-medium">To</span>
               </div>
             </div>
 
             {commitsError && (
-              <p className="text-xs text-red" role="alert">{commitsError}</p>
+              <p className="text-xs text-red bg-red-bg border border-red/20 px-3 py-2 rounded-lg" role="alert">{commitsError}</p>
             )}
           </div>
         </section>
 
         {/* Step 2 — Commits */}
         {hasFetched && (
-          <section aria-labelledby="step-commits" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+          <section aria-labelledby="step-commits" className={`${card} animate-fade-up`}>
             <div className={cardHeader}>
               <StepBadge n={2} />
-              <h2 id="step-commits" className="text-sm font-semibold text-text-1 flex-1">
+              <h2 id="step-commits" className="text-sm font-semibold text-text-1 font-display flex-1">
                 Select commits
-                {commits.length > 0 && (
-                  <span className="ml-2 text-xs text-text-3 font-mono font-normal">
-                    {selected.size}/{commits.length}
-                  </span>
-                )}
               </h2>
               <button
                 onClick={handleFetchCommits}
                 disabled={commitsLoading}
-                className="text-text-3 hover:text-text-2 disabled:opacity-40 transition-colors duration-150 p-0.5"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-3 hover:text-text-2 hover:bg-bg-elevated disabled:opacity-40 transition-all duration-150"
                 aria-label="Refresh commits"
                 title="Refresh commits"
               >
@@ -445,11 +429,11 @@ export default function DashboardPage() {
 
         {/* Step 3 — Context + Tone + Generate */}
         {hasFetched && (
-          <section aria-labelledby="step-context" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+          <section aria-labelledby="step-context" className={`${card} animate-fade-up`}>
             <div className={cardHeader}>
               <StepBadge n={3} />
-              <h2 id="step-context" className="text-sm font-semibold text-text-1">
-                Add context
+              <h2 id="step-context" className="text-sm font-semibold text-text-1 font-display">
+                Generate
               </h2>
             </div>
 
@@ -458,21 +442,22 @@ export default function DashboardPage() {
                 type="text"
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
-                placeholder="What are you working on? (optional)"
+                placeholder="Add context (optional) — what are you working on?"
                 className={inputBase}
               />
 
+              {/* Tone picker — segmented control */}
               <div>
                 <p className="text-[10px] text-text-3 uppercase tracking-widest font-semibold mb-2">Tone</p>
-                <div className="flex items-center gap-1 p-1 bg-bg-base rounded-lg border border-border">
+                <div className="grid grid-cols-4 gap-1 p-1 bg-bg-base rounded-xl border border-border">
                   {TONES.map(({ value, label }) => (
                     <button
                       key={value}
                       onClick={() => setTone(value)}
-                      className={`flex-1 text-xs px-2 py-1.5 rounded-md transition-all duration-150 ${
+                      className={`text-xs py-2 rounded-lg transition-all duration-150 font-medium ${
                         tone === value
-                          ? 'bg-bg-elevated text-text-1 border border-border-hover font-semibold shadow-sm'
-                          : 'text-text-3 hover:text-text-2'
+                          ? 'bg-bg-elevated text-text-1 border border-border-hover shadow-sm'
+                          : 'text-text-3 hover:text-text-2 hover:bg-bg-elevated/50'
                       }`}
                     >
                       {label}
@@ -482,30 +467,28 @@ export default function DashboardPage() {
               </div>
 
               {/* Thread toggle */}
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-3 py-1">
                 <button
                   role="switch"
                   aria-checked={isThread}
                   onClick={handleToggleThread}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                    isThread ? 'bg-green' : 'bg-bg-elevated'
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${
+                    isThread ? 'bg-green' : 'bg-bg-elevated border border-border'
                   }`}
                 >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      isThread ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
+                  <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 mt-[1px] ${
+                    isThread ? 'translate-x-[17px]' : 'translate-x-[1px]'
+                  }`} />
                 </button>
-                <span className="text-xs text-text-2">
-                  Thread mode
-                  <span className="text-text-3 ml-1">(2–4 tweets)</span>
-                </span>
+                <div>
+                  <span className="text-xs font-medium text-text-2">Thread mode</span>
+                  <span className="text-[10px] text-text-3 ml-1.5">generates 2–4 connected tweets</span>
+                </div>
               </div>
 
               <Button
                 variant="primary"
-                size="md"
+                size="lg"
                 loading={generating}
                 disabled={selectedCommits.length === 0 || generating}
                 onClick={handleGenerate}
@@ -515,13 +498,13 @@ export default function DashboardPage() {
                   ? isThread ? 'Generating thread…' : 'Generating…'
                   : selectedCommits.length > 0
                   ? isThread
-                    ? `Generate thread from ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
-                    : `Generate tweet from ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
+                    ? `Generate thread · ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
+                    : `Generate tweet · ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
                   : isThread ? 'Generate thread' : 'Generate tweet'}
               </Button>
 
               {generateError && (
-                <p className="text-sm text-red" role="alert">{generateError}</p>
+                <p className="text-xs text-red bg-red-bg border border-red/20 px-3 py-2.5 rounded-lg" role="alert">{generateError}</p>
               )}
             </div>
           </section>
@@ -529,10 +512,10 @@ export default function DashboardPage() {
 
         {/* Step 4 — Tweet / Thread Preview */}
         {(tweet || thread.length > 0 || generating) && (
-          <section aria-labelledby="step-tweet" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+          <section aria-labelledby="step-tweet" className={`${card} animate-fade-up step-active`}>
             <div className={cardHeader}>
               <StepBadge n={4} />
-              <h2 id="step-tweet" className="text-sm font-semibold text-text-1">
+              <h2 id="step-tweet" className="text-sm font-semibold text-text-1 font-display">
                 Preview &amp; post
               </h2>
             </div>
@@ -620,32 +603,26 @@ export default function DashboardPage() {
 
         {/* Tweet History */}
         {history.length > 0 && (
-          <div className="pt-2">
+          <div className="pt-3">
             <TweetHistory items={history} onClear={handleClearHistory} />
           </div>
         )}
 
-        {/* Settings section */}
-        <div className="flex items-center gap-3 pt-4">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-[10px] font-semibold text-text-3 uppercase tracking-widest">
-            Settings
-          </span>
-          <div className="h-px flex-1 bg-border" />
+        {/* Settings nudge */}
+        <div className="pt-6 pb-2 flex items-center justify-center">
+          <Link
+            href="/settings"
+            className="flex items-center gap-2 text-xs text-text-3 hover:text-text-2 transition-colors duration-150 group"
+          >
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="group-hover:rotate-45 transition-transform duration-300">
+              <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+            </svg>
+            Preferences & auto-post scheduler
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <path d="M2 5h6M5 2l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Link>
         </div>
-
-        {generalPrefs && (
-          <GeneralPreferencesCard
-            initial={generalPrefs}
-            onSaved={(p) => {
-              setGeneralPrefs(p);
-              setTone(p.defaultTone);
-              if (p.defaultRepo) setRepoInput(p.defaultRepo);
-            }}
-          />
-        )}
-
-        {autoPostPrefs && <AutoPostSettings repos={repos} initial={autoPostPrefs} />}
 
       </div>
     </Layout>

@@ -1,6 +1,5 @@
 'use client';
 
-import { Badge } from './ui/Badge';
 import type { Commit } from '@/types';
 
 interface CommitListProps {
@@ -18,67 +17,124 @@ function formatTime(dateStr: string) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+function CheckIcon() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function CommitList({ commits, selected, onToggle, onToggleAll }: CommitListProps) {
   if (commits.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-bg-surface px-5 py-8 text-center">
-        <p className="text-text-3 text-sm">No commits found for the selected date range.</p>
+      <div className="py-10 text-center">
+        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-bg-elevated border border-border mb-3">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-text-3" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M3 12h3m12 0h3M12 3v3m0 12v3" />
+          </svg>
+        </div>
+        <p className="text-text-3 text-sm">No commits in this date range.</p>
       </div>
     );
   }
 
   const allSelected = selected.size === commits.length;
+  const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <div className="rounded-lg border border-border bg-bg-surface overflow-hidden">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div className="flex items-center justify-between mb-2 px-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-text-1">Recent commits</span>
-          <Badge variant={selected.size > 0 ? 'blue' : 'neutral'}>
+          <span className="text-xs font-semibold text-text-2">
             {selected.size} of {commits.length} selected
-          </Badge>
+          </span>
+          {someSelected && (
+            <span className="w-1 h-1 rounded-full bg-green inline-block" />
+          )}
         </div>
         <button
           onClick={onToggleAll}
-          className="text-xs text-text-2 hover:text-text-1 transition-colors duration-150"
+          className="text-xs text-text-3 hover:text-text-1 transition-colors duration-150 font-medium"
         >
           {allSelected ? 'Deselect all' : 'Select all'}
         </button>
       </div>
 
       {/* Commit rows */}
-      <ul role="list">
-        {commits.map((commit, i) => (
-          <li
-            key={commit.sha}
-            className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors duration-150
-              hover:bg-bg-elevated
-              ${i < commits.length - 1 ? 'border-b border-border' : ''}
-              ${selected.has(commit.sha) ? 'bg-blue-bg' : ''}
-            `}
-            onClick={() => onToggle(commit.sha)}
-          >
-            <input
-              type="checkbox"
-              checked={selected.has(commit.sha)}
-              onChange={() => onToggle(commit.sha)}
-              onClick={(e) => e.stopPropagation()}
-              className="mt-0.5 shrink-0 accent-[var(--color-blue)]"
-              aria-label={`Select commit: ${commit.message}`}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-text-1 leading-snug truncate">{commit.message}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="sha text-xs text-text-3">{commit.sha.slice(0, 7)}</span>
-                <span className="text-text-3 text-xs">·</span>
-                <span className="text-xs text-text-2">{commit.author}</span>
-                <span className="text-text-3 text-xs">·</span>
-                <span className="text-xs text-text-3">{formatTime(commit.date)}</span>
+      <ul role="list" className="space-y-0.5">
+        {commits.map((commit) => {
+          const isSelected = selected.has(commit.sha);
+          return (
+            <li
+              key={commit.sha}
+              onClick={() => onToggle(commit.sha)}
+              className={[
+                'group relative flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-pointer',
+                'transition-all duration-150 border',
+                isSelected
+                  ? 'bg-green/[0.06] border-green/20'
+                  : 'border-transparent hover:bg-bg-elevated hover:border-border',
+              ].join(' ')}
+              role="checkbox"
+              aria-checked={isSelected}
+            >
+              {/* Left accent bar */}
+              <span
+                className={[
+                  'absolute left-0 top-2 bottom-2 w-0.5 rounded-full transition-all duration-150',
+                  isSelected ? 'bg-green' : 'bg-transparent',
+                ].join(' ')}
+                aria-hidden="true"
+              />
+
+              {/* Custom checkbox */}
+              <span
+                className={[
+                  'mt-0.5 w-4 h-4 rounded flex items-center justify-center shrink-0',
+                  'border transition-all duration-150',
+                  isSelected
+                    ? 'bg-green border-green text-bg-base'
+                    : 'border-border-hover bg-bg-base group-hover:border-border-hover',
+                ].join(' ')}
+                aria-hidden="true"
+              >
+                {isSelected && <CheckIcon />}
+              </span>
+
+              {/* Content */}
+              <div className="min-w-0 flex-1">
+                <p className={[
+                  'text-sm leading-snug truncate transition-colors duration-150',
+                  isSelected ? 'text-text-1' : 'text-text-2 group-hover:text-text-1',
+                ].join(' ')}>
+                  {commit.message}
+                </p>
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <code className="text-[10px] text-text-3 bg-bg-elevated border border-border px-1.5 py-0.5 rounded font-mono">
+                    {commit.sha.slice(0, 7)}
+                  </code>
+                  <span className="text-text-3 text-[10px]">·</span>
+                  <span className="text-[11px] text-text-3">{commit.author}</span>
+                  <span className="text-text-3 text-[10px]">·</span>
+                  <span className="text-[11px] text-text-3">{formatTime(commit.date)}</span>
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+
+              {/* Hidden native input for accessibility */}
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggle(commit.sha)}
+                onClick={(e) => e.stopPropagation()}
+                className="sr-only"
+                aria-label={`Select commit: ${commit.message}`}
+              />
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

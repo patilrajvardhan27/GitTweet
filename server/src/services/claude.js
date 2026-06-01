@@ -100,4 +100,65 @@ async function generateCardHook(commits, repoName) {
   return text.text.trim().replace(/^["']|["']$/g, '');
 }
 
-module.exports = { generateTweet, generateCardHook };
+/**
+ * @param {{ sha: string, message: string, author: string, date: string }[]} commits
+ * @param {string} repoName
+ * @param {string|null} repoDescription
+ * @param {string|null} context
+ * @param {'default'|'casual'|'technical'|'motivational'} [tone]
+ * @returns {Promise<string[]>} 2–4 tweet strings
+ */
+async function generateThread(commits, repoName, repoDescription, context, tone = 'default') {
+  const commitLines = commits
+    .map((c) => `- ${c.message} (${c.sha.slice(0, 7)})`)
+    .join('\n');
+
+  const toneRule = TONE_RULES[tone] ?? TONE_RULES.default;
+
+  const prompt = [
+    'You are a developer sharing a week of GitHub progress as a Twitter/X thread. Write a 2–4 tweet thread about these commits.',
+    '',
+    `Project: ${repoName}`,
+    repoDescription ? `Description: ${repoDescription}` : '',
+    context ? `Additional context: ${context}` : '',
+    '',
+    'Commits:',
+    commitLines,
+    '',
+    'Rules:',
+    '- Output ONLY the tweet texts, separated by a line containing exactly "---" (three dashes, nothing else)',
+    '- 2 tweets minimum, 4 maximum',
+    '- Each tweet must be under 275 characters',
+    `- ${toneRule}`,
+    '- First tweet: the compelling hook — what shipped this week, make it worth reading',
+    '- Middle tweets: interesting details, technical decisions, or challenges overcome',
+    '- Last tweet: wrap up and add 2–3 relevant hashtags (choose from: #buildinpublic #indiedev #coding #devlog #opensource #webdev #100daysofcode)',
+    '- Do NOT number the tweets (no "1/3", "2/3") — Twitter handles thread numbering',
+    '- Do not use em dashes (—); use commas or colons instead',
+    '- Do not wrap tweets in quotes',
+    '- Do not add any preamble or explanation — output only tweet texts separated by ---',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 800,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = message.content[0];
+  if (text.type !== 'text') throw new Error('Unexpected response type from Claude');
+
+  const tweets = text.text
+    .split(/^---$/m)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  if (tweets.length < 2) throw new Error('Claude returned fewer than 2 tweets for the thread');
+
+  return tweets;
+}
+
+module.exports = { generateTweet, generateThread, generateCardHook };

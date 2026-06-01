@@ -108,7 +108,7 @@ Also update the GitHub OAuth App's homepage URL to your Vercel URL.
 
 ---
 
-## Scope of improvements
+## Scope of improvementsq
 
 ### UX & product
 

@@ -87,6 +87,81 @@ router.post('/generate-tweet', async (req, res, next) => {
   }
 });
 
+// ─── Generate Thread ──────────────────────────────────────────────────────────
+
+router.post('/generate-thread', async (req, res, next) => {
+  try {
+    const { commits, repoName, repoDescription, context, tone } = req.body;
+
+    if (!Array.isArray(commits) || commits.length === 0) {
+      return res.status(400).json({ error: 'commits must be a non-empty array' });
+    }
+
+    if (!repoName || typeof repoName !== 'string') {
+      return res.status(400).json({ error: 'repoName is required' });
+    }
+
+    const validTones = ['default', 'casual', 'technical', 'motivational'];
+    const resolvedTone = validTones.includes(tone) ? tone : 'default';
+
+    const tweets = await claude.generateThread(
+      commits,
+      repoName,
+      repoDescription ?? null,
+      context ?? null,
+      resolvedTone,
+    );
+
+    res.json({ tweets });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Post Thread ──────────────────────────────────────────────────────────────
+
+router.post('/post-thread', requireTwitter, async (req, res, next) => {
+  try {
+    const { tweets, repo, tone, includeCard, commits } = req.body;
+
+    if (!Array.isArray(tweets) || tweets.length < 2) {
+      return res.status(400).json({ error: 'tweets must be an array of at least 2 strings' });
+    }
+
+    if (tweets.some((t) => typeof t !== 'string' || t.length > 280)) {
+      return res.status(400).json({ error: 'Each tweet must be a string under 280 characters' });
+    }
+
+    const { accessToken, accessTokenSecret } = req.session.twitter;
+
+    let mediaId = null;
+    if (includeCard && Array.isArray(commits) && commits.length > 0) {
+      try {
+        const repoName = (typeof repo === 'string' && repo) ? repo : 'repo';
+        const imageBuffer = await buildCard(repoName, commits);
+        mediaId = await twitter.uploadMedia(accessToken, accessTokenSecret, imageBuffer);
+      } catch (err) {
+        console.error('[card] media upload failed, posting thread without image:', err.message);
+      }
+    }
+
+    const { ids, firstId } = await twitter.postThread(accessToken, accessTokenSecret, tweets, mediaId);
+
+    const firstUrl = `https://twitter.com/i/web/status/${firstId}`;
+    res.json({ success: true, tweet_ids: ids, tweet_url: firstUrl });
+
+    const userId = req.session.userId ?? null;
+    const login = req.session.github?.user?.login ?? null;
+    if (repo && (userId || login)) {
+      const resolvedTone = tone ?? 'default';
+      db.saveTweet({ userId, githubLogin: login, text: tweets[0], tweetUrl: firstUrl, repo, tone: resolvedTone })
+        .catch((e) => console.error('[db] saveTweet failed:', e.message));
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Generate Commit Card ─────────────────────────────────────────────────────
 
 router.post('/generate-card', requireGitHub, async (req, res, next) => {

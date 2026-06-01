@@ -129,4 +129,38 @@ async function postTweet(accessToken, accessTokenSecret, text, mediaId = null) {
   }
 }
 
-module.exports = { oauthSign, getUser, uploadMedia, postTweet };
+/**
+ * Posts a thread by chaining each tweet as a reply to the previous one.
+ *
+ * @param {string} accessToken
+ * @param {string} accessTokenSecret
+ * @param {string[]} tweets
+ * @param {string|null} [firstMediaId] - optional media attachment for the first tweet
+ * @returns {Promise<{ ids: string[], firstId: string }>}
+ */
+async function postThread(accessToken, accessTokenSecret, tweets, firstMediaId = null) {
+  const ids = [];
+  let replyToId = null;
+
+  for (let i = 0; i < tweets.length; i++) {
+    const auth = oauthSign({ method: 'POST', url: TWEETS_URL, accessToken, accessTokenSecret });
+    const body = { text: tweets[i] };
+    if (i === 0 && firstMediaId) body.media = { media_ids: [firstMediaId] };
+    if (replyToId) body.reply = { in_reply_to_tweet_id: replyToId };
+
+    try {
+      const { data } = await axios.post(TWEETS_URL, body, {
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      });
+      replyToId = data.data.id;
+      ids.push(data.data.id);
+    } catch (err) {
+      const message = err.response?.data?.detail ?? err.message;
+      throw new Error(`Twitter API error on tweet ${i + 1}: ${message}`);
+    }
+  }
+
+  return { ids, firstId: ids[0] };
+}
+
+module.exports = { oauthSign, getUser, uploadMedia, postTweet, postThread };

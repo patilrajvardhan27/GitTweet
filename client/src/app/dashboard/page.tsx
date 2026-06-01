@@ -7,6 +7,7 @@ import { useCommits } from '@/hooks/useCommits';
 import { Layout } from '@/components/Layout';
 import { CommitList } from '@/components/CommitList';
 import { TweetPreview } from '@/components/TweetPreview';
+import { ThreadPreview } from '@/components/ThreadPreview';
 import { TweetHistory } from '@/components/TweetHistory';
 import { AutoPostSettings } from '@/components/AutoPostSettings';
 import { GeneralPreferencesCard } from '@/components/GeneralPreferences';
@@ -61,7 +62,9 @@ export default function DashboardPage() {
   const [dateFrom, setDateFrom] = useState(toDateInput(sevenDaysAgo));
   const [dateTo, setDateTo] = useState(toDateInput(today));
 
+  const [isThread, setIsThread] = useState(false);
   const [tweet, setTweet] = useState('');
+  const [thread, setThread] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
@@ -135,32 +138,51 @@ export default function DashboardPage() {
     if (!repoInput.trim()) return;
     setHasFetched(false);
     setTweet('');
+    setThread([]);
     setPosted(false);
     setPostedUrl(null);
     await fetchCommits(repoInput.trim(), dateFrom, dateTo);
     setHasFetched(true);
   }
 
+  function handleToggleThread() {
+    setIsThread((prev) => !prev);
+    setTweet('');
+    setThread([]);
+    setPosted(false);
+    setPostedUrl(null);
+    setGenerateError(null);
+    setIncludeCard(false);
+    setCardPreviewUrl(null);
+  }
+
   async function handleGenerate() {
     setGenerating(true);
     setGenerateError(null);
     setTweet('');
+    setThread([]);
     setPosted(false);
     setPostedUrl(null);
 
     const selectedCommits = commits.filter((c) => selected.has(c.sha)) as Commit[];
+    const payload = {
+      commits: selectedCommits,
+      repoName: repoMeta?.name ?? repoInput,
+      repoDescription: repoMeta?.description ?? null,
+      context: context.trim() || null,
+      tone,
+    };
 
     try {
-      const res = await api.post<{ tweet: string }>('/api/generate-tweet', {
-        commits: selectedCommits,
-        repoName: repoMeta?.name ?? repoInput,
-        repoDescription: repoMeta?.description ?? null,
-        context: context.trim() || null,
-        tone,
-      });
-      setTweet(res.tweet);
+      if (isThread) {
+        const res = await api.post<{ tweets: string[] }>('/api/generate-thread', payload);
+        setThread(res.tweets);
+      } else {
+        const res = await api.post<{ tweet: string }>('/api/generate-tweet', payload);
+        setTweet(res.tweet);
+      }
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : 'Failed to generate tweet');
+      setGenerateError(err instanceof Error ? err.message : `Failed to generate ${isThread ? 'thread' : 'tweet'}`);
     } finally {
       setGenerating(false);
     }
@@ -213,6 +235,56 @@ export default function DashboardPage() {
       }
     } catch (err) {
       setPostError(err instanceof Error ? err.message : 'Failed to post tweet');
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function handlePostThread() {
+    setPosting(true);
+    setPostError(null);
+    setPostedCardUrl(null);
+
+    try {
+      const res = await api.post<{ success: boolean; tweet_ids: string[]; tweet_url: string }>(
+        '/api/post-thread',
+        {
+          tweets: thread,
+          repo: repoInput,
+          tone,
+          includeCard: includeCard && selectedCommits.length > 0,
+          commits: includeCard ? selectedCommits.slice(0, 1) : undefined,
+        },
+      );
+      setPosted(true);
+      setPostedUrl(res.tweet_url);
+
+      const item: TweetHistoryItem = {
+        id: Date.now().toString(),
+        text: thread[0],
+        url: res.tweet_url,
+        repo: repoInput,
+        date: new Date().toISOString(),
+        tone,
+      };
+      setHistory((prev) => [item, ...prev].slice(0, 20));
+
+      if (includeCard && selectedCommits.length > 0) {
+        setCardGenerating(true);
+        try {
+          const cardRes = await api.post<{ dataUrl: string }>('/api/generate-card', {
+            repoName: repoInput,
+            commits: selectedCommits.slice(0, 1),
+          });
+          setPostedCardUrl(cardRes.dataUrl);
+        } catch {
+          // non-fatal
+        } finally {
+          setCardGenerating(false);
+        }
+      }
+    } catch (err) {
+      setPostError(err instanceof Error ? err.message : 'Failed to post thread');
     } finally {
       setPosting(false);
     }
@@ -409,6 +481,28 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Thread toggle */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  role="switch"
+                  aria-checked={isThread}
+                  onClick={handleToggleThread}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                    isThread ? 'bg-green' : 'bg-bg-elevated'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      isThread ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+                <span className="text-xs text-text-2">
+                  Thread mode
+                  <span className="text-text-3 ml-1">(2–4 tweets)</span>
+                </span>
+              </div>
+
               <Button
                 variant="primary"
                 size="md"
@@ -418,10 +512,12 @@ export default function DashboardPage() {
                 className="w-full"
               >
                 {generating
-                  ? 'Generating…'
+                  ? isThread ? 'Generating thread…' : 'Generating…'
                   : selectedCommits.length > 0
-                  ? `Generate tweet from ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
-                  : 'Generate tweet'}
+                  ? isThread
+                    ? `Generate thread from ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
+                    : `Generate tweet from ${selectedCommits.length} commit${selectedCommits.length !== 1 ? 's' : ''}`
+                  : isThread ? 'Generate thread' : 'Generate tweet'}
               </Button>
 
               {generateError && (
@@ -431,8 +527,8 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Step 4 — Tweet Preview */}
-        {(tweet || generating) && (
+        {/* Step 4 — Tweet / Thread Preview */}
+        {(tweet || thread.length > 0 || generating) && (
           <section aria-labelledby="step-tweet" className="rounded-xl border border-border bg-bg-surface overflow-hidden">
             <div className={cardHeader}>
               <StepBadge n={4} />
@@ -445,8 +541,39 @@ export default function DashboardPage() {
               {generating ? (
                 <div className="py-8 flex items-center justify-center gap-3 text-text-3">
                   <Spinner size={18} />
-                  <span className="text-sm">Generating your tweet…</span>
+                  <span className="text-sm">{isThread ? 'Generating your thread…' : 'Generating your tweet…'}</span>
                 </div>
+              ) : isThread && thread.length > 0 ? (
+                <ThreadPreview
+                  tweets={thread}
+                  onChange={(i, val) => setThread((prev) => prev.map((t, idx) => idx === i ? val : t))}
+                  user={twitter}
+                  onPost={handlePostThread}
+                  onRegenerate={handleGenerate}
+                  posting={posting}
+                  posted={posted}
+                  postedUrl={postedUrl}
+                  includeCard={includeCard}
+                  onToggleCard={async () => {
+                    const next = !includeCard;
+                    setIncludeCard(next);
+                    setCardPreviewUrl(null);
+                    if (next && selectedCommits.length > 0) {
+                      setCardGenerating(true);
+                      try {
+                        const r = await api.post<{ dataUrl: string }>('/api/generate-card', {
+                          repoName: repoInput,
+                          commits: selectedCommits.slice(0, 1),
+                        });
+                        setCardPreviewUrl(r.dataUrl);
+                      } catch { /* non-fatal */ }
+                      finally { setCardGenerating(false); }
+                    }
+                  }}
+                  cardGenerating={cardGenerating}
+                  cardPreviewUrl={cardPreviewUrl}
+                  postedCardUrl={postedCardUrl}
+                />
               ) : (
                 <TweetPreview
                   tweet={tweet}
